@@ -80,16 +80,24 @@
           },
           "tooling": {
             "type": "object",
-            "description": "Architecture-level tooling metadata emitted in each .isa file."
+            "description": "Architecture-level tooling metadata emitted in each .isa file, including the Bin2Bin translation contract."
           },
           "op_tooling": {
             "type": "object",
-            "description": "Per-instruction tooling metadata emitted under op.tooling."
+            "description": "Per-instruction tooling metadata emitted under op.tooling, including binary_translation."
+          },
+          "bin2bin": {
+            "type": "object",
+            "description": "Bin2Bin binary-translation metadata embedded in each ISA description."
           }
         }
       }
     },
     "tooling_schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "bin2bin_schema_version": {
       "type": "integer",
       "const": 1
     }

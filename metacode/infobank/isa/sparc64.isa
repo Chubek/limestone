@@ -157,7 +157,28 @@ op add { class = arithmetic; encoding = ADD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "add"; syntax = "add %{rs1}, %{rs2}, %{rd}"; encoding = "ADD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "add"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SUB { width = 32;
@@ -180,7 +201,28 @@ op sub { class = arithmetic; encoding = SUB;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sub"; syntax = "sub %{rs1}, %{rs2}, %{rd}"; encoding = "SUB"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "sub"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding AND { width = 32;
@@ -203,7 +245,28 @@ op and { class = arithmetic; encoding = AND;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "and"; syntax = "and %{rs1}, %{rs2}, %{rd}"; encoding = "AND"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "and"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding OR { width = 32;
@@ -226,7 +289,28 @@ op or { class = arithmetic; encoding = OR;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "or"; syntax = "or %{rs1}, %{rs2}, %{rd}"; encoding = "OR"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "or"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding XOR { width = 32;
@@ -249,7 +333,28 @@ op xor { class = arithmetic; encoding = XOR;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "xor"; syntax = "xor %{rs1}, %{rs2}, %{rd}"; encoding = "XOR"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "xor"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ANDN { width = 32;
@@ -272,7 +377,28 @@ op andn { class = arithmetic; encoding = ANDN;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "andn"; syntax = "andn %{rs1}, %{rs2}, %{rd}"; encoding = "ANDN"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "and"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ORN { width = 32;
@@ -295,7 +421,28 @@ op orn { class = arithmetic; encoding = ORN;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "orn"; syntax = "orn %{rs1}, %{rs2}, %{rd}"; encoding = "ORN"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "or"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding XNOR { width = 32;
@@ -318,7 +465,28 @@ op xnor { class = arithmetic; encoding = XNOR;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "xnor"; syntax = "xnor %{rs1}, %{rs2}, %{rd}"; encoding = "XNOR"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "xnor"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ADDX { width = 32;
@@ -341,7 +509,28 @@ op addx { class = arithmetic; encoding = ADDX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "addx"; syntax = "addx %{rs1}, %{rs2}, %{rd}"; encoding = "ADDX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "add"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SUBX { width = 32;
@@ -364,7 +553,28 @@ op subx { class = arithmetic; encoding = SUBX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "subx"; syntax = "subx %{rs1}, %{rs2}, %{rd}"; encoding = "SUBX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "sub"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ADDCC { width = 32;
@@ -387,7 +597,28 @@ op addcc { class = arithmetic; encoding = ADDCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "addcc"; syntax = "addcc %{rs1}, %{rs2}, %{rd}"; encoding = "ADDCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "add"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SUBCC { width = 32;
@@ -410,7 +641,28 @@ op subcc { class = arithmetic; encoding = SUBCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "subcc"; syntax = "subcc %{rs1}, %{rs2}, %{rd}"; encoding = "SUBCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "sub"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ANDCC { width = 32;
@@ -433,7 +685,28 @@ op andcc { class = arithmetic; encoding = ANDCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "andcc"; syntax = "andcc %{rs1}, %{rs2}, %{rd}"; encoding = "ANDCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "and"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ORCC { width = 32;
@@ -456,7 +729,28 @@ op orcc { class = arithmetic; encoding = ORCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "orcc"; syntax = "orcc %{rs1}, %{rs2}, %{rd}"; encoding = "ORCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "or"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding XORCC { width = 32;
@@ -479,7 +773,28 @@ op xorcc { class = arithmetic; encoding = XORCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "xorcc"; syntax = "xorcc %{rs1}, %{rs2}, %{rd}"; encoding = "XORCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "xor"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ADDXCC { width = 32;
@@ -502,7 +817,28 @@ op addxcc { class = arithmetic; encoding = ADDXCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "addxcc"; syntax = "addxcc %{rs1}, %{rs2}, %{rd}"; encoding = "ADDXCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "add"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SUBXCC { width = 32;
@@ -525,7 +861,28 @@ op subxcc { class = arithmetic; encoding = SUBXCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "subxcc"; syntax = "subxcc %{rs1}, %{rs2}, %{rd}"; encoding = "SUBXCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "sub"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ANDNCC { width = 32;
@@ -548,7 +905,28 @@ op andncc { class = arithmetic; encoding = ANDNCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "andncc"; syntax = "andncc %{rs1}, %{rs2}, %{rd}"; encoding = "ANDNCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "and"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ORNCC { width = 32;
@@ -571,7 +949,28 @@ op orncc { class = arithmetic; encoding = ORNCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "orncc"; syntax = "orncc %{rs1}, %{rs2}, %{rd}"; encoding = "ORNCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "or"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding XNORCC { width = 32;
@@ -594,7 +993,28 @@ op xnorcc { class = arithmetic; encoding = XNORCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "xnorcc"; syntax = "xnorcc %{rs1}, %{rs2}, %{rd}"; encoding = "XNORCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "xnor"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding TADDCC { width = 32;
@@ -617,7 +1037,28 @@ op taddcc { class = arithmetic; encoding = TADDCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "taddcc"; syntax = "taddcc %{rs1}, %{rs2}, %{rd}"; encoding = "TADDCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding TSUBCC { width = 32;
@@ -640,7 +1081,28 @@ op tsubcc { class = arithmetic; encoding = TSUBCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "tsubcc"; syntax = "tsubcc %{rs1}, %{rs2}, %{rd}"; encoding = "TSUBCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding UMUL { width = 32;
@@ -663,7 +1125,28 @@ op umul { class = arithmetic; encoding = UMUL;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "umul"; syntax = "umul %{rs1}, %{rs2}, %{rd}"; encoding = "UMUL"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SMUL { width = 32;
@@ -686,7 +1169,28 @@ op smul { class = arithmetic; encoding = SMUL;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "smul"; syntax = "smul %{rs1}, %{rs2}, %{rd}"; encoding = "SMUL"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SMULCC { width = 32;
@@ -709,7 +1213,28 @@ op smulcc { class = arithmetic; encoding = SMULCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "smulcc"; syntax = "smulcc %{rs1}, %{rs2}, %{rd}"; encoding = "SMULCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding MULSCC { width = 32;
@@ -732,7 +1257,28 @@ op mulscc { class = arithmetic; encoding = MULSCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "mulscc"; syntax = "mulscc %{rs1}, %{rs2}, %{rd}"; encoding = "MULSCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "mul"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding MULX { width = 32;
@@ -755,7 +1301,28 @@ op mulx { class = arithmetic; encoding = MULX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "mulx"; syntax = "mulx %{rs1}, %{rs2}, %{rd}"; encoding = "MULX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "mul"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding UDIV { width = 32;
@@ -778,7 +1345,28 @@ op udiv { class = arithmetic; encoding = UDIV;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "udiv"; syntax = "udiv %{rs1}, %{rs2}, %{rd}"; encoding = "UDIV"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SDIV { width = 32;
@@ -801,7 +1389,28 @@ op sdiv { class = arithmetic; encoding = SDIV;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sdiv"; syntax = "sdiv %{rs1}, %{rs2}, %{rd}"; encoding = "SDIV"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding UDIVX { width = 32;
@@ -824,7 +1433,28 @@ op udivx { class = arithmetic; encoding = UDIVX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "udivx"; syntax = "udivx %{rs1}, %{rs2}, %{rd}"; encoding = "UDIVX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SDIVX { width = 32;
@@ -847,7 +1477,28 @@ op sdivx { class = arithmetic; encoding = SDIVX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sdivx"; syntax = "sdivx %{rs1}, %{rs2}, %{rd}"; encoding = "SDIVX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding UDIVCC { width = 32;
@@ -870,7 +1521,28 @@ op udivcc { class = arithmetic; encoding = UDIVCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "udivcc"; syntax = "udivcc %{rs1}, %{rs2}, %{rd}"; encoding = "UDIVCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SDIVCC { width = 32;
@@ -893,7 +1565,28 @@ op sdivcc { class = arithmetic; encoding = SDIVCC;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sdivcc"; syntax = "sdivcc %{rs1}, %{rs2}, %{rd}"; encoding = "SDIVCC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SLLX { width = 32;
@@ -916,7 +1609,28 @@ op sllx { class = arithmetic; encoding = SLLX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sllx"; syntax = "sllx %{rs1}, %{rs2}, %{rd}"; encoding = "SLLX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "shl"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SRLX { width = 32;
@@ -939,7 +1653,28 @@ op srlx { class = arithmetic; encoding = SRLX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "srlx"; syntax = "srlx %{rs1}, %{rs2}, %{rd}"; encoding = "SRLX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "shr"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SRAX { width = 32;
@@ -962,7 +1697,28 @@ op srax { class = arithmetic; encoding = SRAX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "srax"; syntax = "srax %{rs1}, %{rs2}, %{rd}"; encoding = "SRAX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "ashr"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SAVE { width = 32;
@@ -985,7 +1741,28 @@ op save { class = misc; encoding = SAVE;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "save"; syntax = "save %{rs1}, %{rs2}, %{rd}"; encoding = "SAVE"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding RESTORE { width = 32;
@@ -1008,7 +1785,28 @@ op restore { class = misc; encoding = RESTORE;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "restore"; syntax = "restore %{rs1}, %{rs2}, %{rd}"; encoding = "RESTORE"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSB { width = 32;
@@ -1031,7 +1829,28 @@ op ldsb { class = load; encoding = LDSB;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldsb"; syntax = "ldsb [%{rs1}+%{rs2}], %{rd}"; encoding = "LDSB"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSB_IMM { width = 32;
@@ -1055,7 +1874,28 @@ op ldsb_imm { class = load; encoding = LDSB_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldsb_imm"; syntax = "ldsb [%{rs1}+{offset}], %{rd}"; encoding = "LDSB_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSH { width = 32;
@@ -1078,7 +1918,28 @@ op ldsh { class = load; encoding = LDSH;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldsh"; syntax = "ldsh [%{rs1}+%{rs2}], %{rd}"; encoding = "LDSH"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSH_IMM { width = 32;
@@ -1102,7 +1963,28 @@ op ldsh_imm { class = load; encoding = LDSH_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldsh_imm"; syntax = "ldsh [%{rs1}+{offset}], %{rd}"; encoding = "LDSH_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDUB { width = 32;
@@ -1125,7 +2007,28 @@ op ldub { class = load; encoding = LDUB;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldub"; syntax = "ldub [%{rs1}+%{rs2}], %{rd}"; encoding = "LDUB"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDUB_IMM { width = 32;
@@ -1149,7 +2052,28 @@ op ldub_imm { class = load; encoding = LDUB_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldub_imm"; syntax = "ldub [%{rs1}+{offset}], %{rd}"; encoding = "LDUB_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDUH { width = 32;
@@ -1172,7 +2096,28 @@ op lduh { class = load; encoding = LDUH;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "lduh"; syntax = "lduh [%{rs1}+%{rs2}], %{rd}"; encoding = "LDUH"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDUH_IMM { width = 32;
@@ -1196,7 +2141,28 @@ op lduh_imm { class = load; encoding = LDUH_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "lduh_imm"; syntax = "lduh [%{rs1}+{offset}], %{rd}"; encoding = "LDUH_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSW { width = 32;
@@ -1219,7 +2185,28 @@ op ldsw { class = load; encoding = LDSW;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldsw"; syntax = "ldsw [%{rs1}+%{rs2}], %{rd}"; encoding = "LDSW"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSW_IMM { width = 32;
@@ -1243,7 +2230,28 @@ op ldsw_imm { class = load; encoding = LDSW_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldsw_imm"; syntax = "ldsw [%{rs1}+{offset}], %{rd}"; encoding = "LDSW_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDX { width = 32;
@@ -1266,7 +2274,28 @@ op ldx { class = load; encoding = LDX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldx"; syntax = "ldx [%{rs1}+%{rs2}], %{rd}"; encoding = "LDX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDX_IMM { width = 32;
@@ -1290,7 +2319,28 @@ op ldx_imm { class = load; encoding = LDX_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldx_imm"; syntax = "ldx [%{rs1}+{offset}], %{rd}"; encoding = "LDX_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LD { width = 32;
@@ -1313,7 +2363,28 @@ op ld { class = load; encoding = LD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ld"; syntax = "ld [%{rs1}+%{rs2}], %{rd}"; encoding = "LD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LD_IMM { width = 32;
@@ -1337,7 +2408,28 @@ op ld_imm { class = load; encoding = LD_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ld_imm"; syntax = "ld [%{rs1}+{offset}], %{rd}"; encoding = "LD_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDD_IMM { width = 32;
@@ -1361,7 +2453,28 @@ op ldd_imm { class = load; encoding = LDD_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldd_imm"; syntax = "ldd [%{rs1}+{offset}], %{rd}"; encoding = "LDD_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSTUB { width = 32;
@@ -1384,7 +2497,28 @@ op ldstub { class = load; encoding = LDSTUB;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldstub"; syntax = "ldstub [%{rs1}+%{rs2}], %{rd}"; encoding = "LDSTUB"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding LDSTUB_IMM { width = 32;
@@ -1408,7 +2542,28 @@ op ldstub_imm { class = load; encoding = LDSTUB_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ldstub_imm"; syntax = "ldstub [%{rs1}+{offset}], %{rd}"; encoding = "LDSTUB_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SWAP { width = 32;
@@ -1431,7 +2586,28 @@ op swap { class = load; encoding = SWAP;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "swap"; syntax = "swap [%{rs1}+%{rs2}], %{rd}"; encoding = "SWAP"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SWAP_IMM { width = 32;
@@ -1455,7 +2631,28 @@ op swap_imm { class = load; encoding = SWAP_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "read"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "swap_imm"; syntax = "swap [%{rs1}+{offset}], %{rd}"; encoding = "SWAP_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "load"; semantic_pattern = "load"; control_flow = "fallthrough"; memory_read = true; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "read";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STB { width = 32;
@@ -1478,7 +2675,28 @@ op stb { class = store; encoding = STB;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "stb"; syntax = "stb %{rd}, [%{rs1}+%{rs2}]"; encoding = "STB"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STB_IMM { width = 32;
@@ -1502,7 +2720,28 @@ op stb_imm { class = store; encoding = STB_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "stb_imm"; syntax = "stb %{rd}, [%{rs1}+{offset}]"; encoding = "STB_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STH { width = 32;
@@ -1525,7 +2764,28 @@ op sth { class = store; encoding = STH;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sth"; syntax = "sth %{rd}, [%{rs1}+%{rs2}]"; encoding = "STH"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STH_IMM { width = 32;
@@ -1549,7 +2809,28 @@ op sth_imm { class = store; encoding = STH_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sth_imm"; syntax = "sth %{rd}, [%{rs1}+{offset}]"; encoding = "STH_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ST { width = 32;
@@ -1572,7 +2853,28 @@ op st { class = store; encoding = ST;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "st"; syntax = "st %{rd}, [%{rs1}+%{rs2}]"; encoding = "ST"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding ST_IMM { width = 32;
@@ -1596,7 +2898,28 @@ op st_imm { class = store; encoding = ST_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "st_imm"; syntax = "st %{rd}, [%{rs1}+{offset}]"; encoding = "ST_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STX { width = 32;
@@ -1619,7 +2942,28 @@ op stx { class = store; encoding = STX;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "stx"; syntax = "stx %{rd}, [%{rs1}+%{rs2}]"; encoding = "STX"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STX_IMM { width = 32;
@@ -1643,7 +2987,28 @@ op stx_imm { class = store; encoding = STX_IMM;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "write"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "stx_imm"; syntax = "stx %{rd}, [%{rs1}+{offset}]"; encoding = "STX_IMM"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "offset"]; };
     reverse_engineering = { category = "store"; semantic_pattern = "store"; control_flow = "fallthrough"; memory_read = false; memory_write = true; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "write";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding SETHI { width = 32;
@@ -1666,7 +3031,28 @@ op sethi { class = misc; encoding = SETHI;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "sethi"; syntax = "sethi {imm}, %{rd}"; encoding = "SETHI"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "imm"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "move"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding CLR { width = 32;
@@ -1687,7 +3073,28 @@ op clr { class = misc; encoding = CLR;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "clr"; syntax = "clr %{rd}"; encoding = "CLR"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BN { width = 32;
@@ -1709,7 +3116,28 @@ op bn { class = branch; encoding = BN;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bn"; syntax = "bn {offset}"; encoding = "BN"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BE { width = 32;
@@ -1731,7 +3159,28 @@ op be { class = branch; encoding = BE;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "be"; syntax = "be {offset}"; encoding = "BE"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BLE { width = 32;
@@ -1753,7 +3202,28 @@ op ble { class = branch; encoding = BLE;
     vmm = { terminator = true; control_flow = "conditional_branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ble"; syntax = "ble {offset}"; encoding = "BLE"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "conditional_branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "conditional_branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BL { width = 32;
@@ -1775,7 +3245,28 @@ op bl { class = branch; encoding = BL;
     vmm = { terminator = false; control_flow = "call"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bl"; syntax = "bl {offset}"; encoding = "BL"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "call"; control_flow = "call"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "call";
+      terminates_block = false;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BLEU { width = 32;
@@ -1797,7 +3288,28 @@ op bleu { class = branch; encoding = BLEU;
     vmm = { terminator = true; control_flow = "conditional_branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bleu"; syntax = "bleu {offset}"; encoding = "BLEU"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "conditional_branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "conditional_branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BCS { width = 32;
@@ -1819,7 +3331,28 @@ op bcs { class = branch; encoding = BCS;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bcs"; syntax = "bcs {offset}"; encoding = "BCS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BNEG { width = 32;
@@ -1841,7 +3374,28 @@ op bneg { class = branch; encoding = BNEG;
     vmm = { terminator = true; control_flow = "conditional_branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bneg"; syntax = "bneg {offset}"; encoding = "BNEG"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "conditional_branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "conditional_branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BVS { width = 32;
@@ -1863,7 +3417,28 @@ op bvs { class = branch; encoding = BVS;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bvs"; syntax = "bvs {offset}"; encoding = "BVS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BA { width = 32;
@@ -1885,7 +3460,28 @@ op ba { class = branch; encoding = BA;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ba"; syntax = "ba {offset}"; encoding = "BA"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BNE { width = 32;
@@ -1907,7 +3503,28 @@ op bne { class = branch; encoding = BNE;
     vmm = { terminator = true; control_flow = "conditional_branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bne"; syntax = "bne {offset}"; encoding = "BNE"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "if"; control_flow = "conditional_branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "conditional_branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BG { width = 32;
@@ -1929,7 +3546,28 @@ op bg { class = branch; encoding = BG;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bg"; syntax = "bg {offset}"; encoding = "BG"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BGE { width = 32;
@@ -1951,7 +3589,28 @@ op bge { class = branch; encoding = BGE;
     vmm = { terminator = true; control_flow = "conditional_branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bge"; syntax = "bge {offset}"; encoding = "BGE"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "if"; control_flow = "conditional_branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "conditional_branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BGU { width = 32;
@@ -1973,7 +3632,28 @@ op bgu { class = branch; encoding = BGU;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bgu"; syntax = "bgu {offset}"; encoding = "BGU"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BGEU { width = 32;
@@ -1995,7 +3675,28 @@ op bgeu { class = branch; encoding = BGEU;
     vmm = { terminator = true; control_flow = "conditional_branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bgeu"; syntax = "bgeu {offset}"; encoding = "BGEU"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "if"; control_flow = "conditional_branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "conditional_branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BPOS { width = 32;
@@ -2017,7 +3718,28 @@ op bpos { class = branch; encoding = BPOS;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bpos"; syntax = "bpos {offset}"; encoding = "BPOS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BVC { width = 32;
@@ -2039,7 +3761,28 @@ op bvc { class = branch; encoding = BVC;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "bvc"; syntax = "bvc {offset}"; encoding = "BVC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding BA_A { width = 32;
@@ -2061,7 +3804,28 @@ op ba_a { class = branch; encoding = BA_A;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ba_a"; syntax = "ba,a {offset}"; encoding = "BA_A"; encoding_width = "32"; opcode = "unknown"; operand_order = ["offset"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding JMPL { width = 32;
@@ -2083,7 +3847,28 @@ op jmpl { class = branch; encoding = JMPL;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "jmpl"; syntax = "jmpl %{rs1}, %{rd}"; encoding = "JMPL"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding POPC { width = 32;
@@ -2105,7 +3890,28 @@ op popc { class = branch; encoding = POPC;
     vmm = { terminator = true; control_flow = "branch"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "popc"; syntax = "popc %{rs2}, %{rd}"; encoding = "POPC"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "branch"; semantic_pattern = "effect"; control_flow = "branch"; memory_read = false; memory_write = false; branch_target = "relative_or_indirect"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "branch";
+      terminates_block = true;
+      branch_target = "relative_or_indirect";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FLUSH { width = 32;
@@ -2127,7 +3933,28 @@ op flush { class = misc; encoding = FLUSH;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "flush"; syntax = "flush {imm}"; encoding = "FLUSH"; encoding_width = "32"; opcode = "unknown"; operand_order = ["imm"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding NOP { width = 32;
@@ -2147,7 +3974,28 @@ op nop { class = misc; encoding = NOP;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "nop"; syntax = "nop"; encoding = "NOP"; encoding_width = "32"; opcode = "unknown"; operand_order = []; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding RET { width = 32;
@@ -2167,7 +4015,28 @@ op ret { class = misc; encoding = RET;
     vmm = { terminator = true; control_flow = "return"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "ret"; syntax = "ret"; encoding = "RET"; encoding_width = "32"; opcode = "unknown"; operand_order = []; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "return"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "code"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "return";
+      terminates_block = true;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding RETL { width = 32;
@@ -2187,7 +4056,28 @@ op retl { class = misc; encoding = RETL;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "retl"; syntax = "retl"; encoding = "RETL"; encoding_width = "32"; opcode = "unknown"; operand_order = []; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding STBAR { width = 32;
@@ -2207,7 +4097,28 @@ op stbar { class = misc; encoding = STBAR;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "stbar"; syntax = "stbar"; encoding = "STBAR"; encoding_width = "32"; opcode = "unknown"; operand_order = []; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FADDS { width = 32;
@@ -2230,7 +4141,28 @@ op fadds { class = arithmetic; encoding = FADDS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fadds"; syntax = "fadds %{rs1}, %{rs2}, %{rd}"; encoding = "FADDS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FSUBS { width = 32;
@@ -2253,7 +4185,28 @@ op fsubs { class = arithmetic; encoding = FSUBS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fsubs"; syntax = "fsubs %{rs1}, %{rs2}, %{rd}"; encoding = "FSUBS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FMULS { width = 32;
@@ -2276,7 +4229,28 @@ op fmuls { class = arithmetic; encoding = FMULS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fmuls"; syntax = "fmuls %{rs1}, %{rs2}, %{rd}"; encoding = "FMULS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FDIVS { width = 32;
@@ -2299,7 +4273,28 @@ op fdivs { class = arithmetic; encoding = FDIVS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fdivs"; syntax = "fdivs %{rs1}, %{rs2}, %{rd}"; encoding = "FDIVS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FADDD { width = 32;
@@ -2322,7 +4317,28 @@ op faddd { class = arithmetic; encoding = FADDD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "faddd"; syntax = "faddd %{rs1}, %{rs2}, %{rd}"; encoding = "FADDD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FSUBD { width = 32;
@@ -2345,7 +4361,28 @@ op fsubd { class = arithmetic; encoding = FSUBD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fsubd"; syntax = "fsubd %{rs1}, %{rs2}, %{rd}"; encoding = "FSUBD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FMULD { width = 32;
@@ -2368,7 +4405,28 @@ op fmuld { class = arithmetic; encoding = FMULD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fmuld"; syntax = "fmuld %{rs1}, %{rs2}, %{rd}"; encoding = "FMULD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FDIVD { width = 32;
@@ -2391,7 +4449,28 @@ op fdivd { class = arithmetic; encoding = FDIVD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fdivd"; syntax = "fdivd %{rs1}, %{rs2}, %{rd}"; encoding = "FDIVD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs1", "rs2"]; };
     reverse_engineering = { category = "arithmetic"; semantic_pattern = "intrinsic"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FMOVS { width = 32;
@@ -2413,7 +4492,28 @@ op fmovs { class = misc; encoding = FMOVS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fmovs"; syntax = "fmovs %{rs2}, %{rd}"; encoding = "FMOVS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "move"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FMOVD { width = 32;
@@ -2435,7 +4535,28 @@ op fmovd { class = misc; encoding = FMOVD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fmovd"; syntax = "fmovd %{rs2}, %{rd}"; encoding = "FMOVD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "move"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FNEGS { width = 32;
@@ -2457,7 +4578,28 @@ op fnegs { class = misc; encoding = FNEGS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fnegs"; syntax = "fnegs %{rs2}, %{rd}"; encoding = "FNEGS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FNEGD { width = 32;
@@ -2479,7 +4621,28 @@ op fnegd { class = misc; encoding = FNEGD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fnegd"; syntax = "fnegd %{rs2}, %{rd}"; encoding = "FNEGD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FABSS { width = 32;
@@ -2501,7 +4664,28 @@ op fabss { class = misc; encoding = FABSS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fabss"; syntax = "fabss %{rs2}, %{rd}"; encoding = "FABSS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FABSD { width = 32;
@@ -2523,7 +4707,28 @@ op fabsd { class = misc; encoding = FABSD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fabsd"; syntax = "fabsd %{rs2}, %{rd}"; encoding = "FABSD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rd", "rs2"]; };
     reverse_engineering = { category = "misc"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FCMPS { width = 32;
@@ -2545,7 +4750,28 @@ op fcmps { class = compare; encoding = FCMPS;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fcmps"; syntax = "fcmps %{rs1}, %{rs2}"; encoding = "FCMPS"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rs1", "rs2"]; };
     reverse_engineering = { category = "compare"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 encoding FCMPD { width = 32;
@@ -2567,7 +4793,28 @@ op fcmpd { class = compare; encoding = FCMPD;
     vmm = { terminator = false; control_flow = "fallthrough"; memory_effect = "none"; may_trap = false; atomic = false; serializing = false; privilege = "unknown"; helper_required = false; };
     disassembly = { mnemonic = "fcmpd"; syntax = "fcmpd %{rs1}, %{rs2}"; encoding = "FCMPD"; encoding_width = "32"; opcode = "unknown"; operand_order = ["rs1", "rs2"]; };
     reverse_engineering = { category = "compare"; semantic_pattern = "effect"; control_flow = "fallthrough"; memory_read = false; memory_write = false; branch_target = "none"; xref_kind = "data_or_none"; semantic_confidence = "derived_from_existing_spec"; };
-  }
+  
+    binary_translation = {
+      schema_version = 1;
+      semantic_source = "semantics";
+      encoding_source = "encoding";
+      operand_source = "operands";
+      dataflow_source = "dataflow";
+      control_flow = "fallthrough";
+      terminates_block = false;
+      branch_target = "none";
+      memory_effect = "none";
+      may_trap = false;
+      atomic = false;
+      serializing = false;
+      privilege = "unknown";
+      pc_effect = "derive_from_semantics_and_control_flow";
+      implicit_register_effects = "derive_from_semantics";
+      flag_effects = "derive_from_dataflow_and_semantics";
+      target_lowering = "instruction_selection.pattern";
+      equivalence_basis = "semantics";
+    };
+}
 }
 
 # Tooling augmentation: declarative metadata for schedulers, register allocators,
@@ -2654,5 +4901,32 @@ tooling {
     equivalence = "semantic_s_expression";
     opaque_operations = "preserve_as_intrinsic";
     confidence = "derived_from_existing_spec";
+  };
+
+  bin2bin = {
+    schema_version = 1;
+    execution_domain = "native_machine_code";
+    semantic_format = "s-expression";
+    instruction_encoding = "fixed32";
+    encoding_widths = ["32"];
+    endianness = "big";
+    word_size = 64;
+    address_size = 64;
+    instruction_boundary = "encoding_defined";
+    instruction_identity = ["encoding", "mnemonic", "operand_signature"];
+    operand_source = "op.operands";
+    semantic_source = "op.semantics";
+    dataflow_source = "op.tooling.dataflow";
+    control_flow_source = "op.tooling.vmm";
+    branch_target_source = "op.tooling.reverse_engineering";
+    memory_effect_source = "op.tooling.dataflow_and_vmm";
+    implicit_state_source = "op.semantics_and_architecture_state";
+    relocation_model = "object_format_dependent";
+    indirect_target_policy = "runtime_or_static_analysis_dependent";
+    unknown_semantics_policy = "preserve_opaque_or_reject";
+    unsupported_instruction_policy = "fail_closed";
+    block_translation_unit = "basic_block_or_trace";
+    equivalence_basis = "semantic_s_expression";
+    cache_safe_when = ["source_identity", "source_architecture", "target_architecture", "translation_rules", "infobank_version", "translator_configuration"];
   };
 }

@@ -33,9 +33,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/x86.isa",
@@ -66,9 +72,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/mips32.isa",
@@ -99,9 +111,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/s390x.isa",
@@ -131,9 +149,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/ppc32.isa",
@@ -164,9 +188,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/m68k.isa",
@@ -196,9 +226,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/aarch64.isa",
@@ -229,9 +265,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/sparc64.isa",
@@ -262,9 +304,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/amdgpu.isa",
@@ -295,9 +343,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/riscv64.isa",
@@ -328,9 +382,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/spirv.isa",
@@ -360,9 +420,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/loongarch64.isa",
@@ -393,9 +459,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/loongarch32.isa",
@@ -426,9 +498,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/mips64.isa",
@@ -459,9 +537,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/tricore.isa",
@@ -491,9 +575,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/arm32.isa",
@@ -524,9 +614,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/directx.isa",
@@ -557,9 +653,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/avr.isa",
@@ -589,9 +691,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/ppc64.isa",
@@ -622,9 +730,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/wasm.isa",
@@ -652,9 +766,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/riscv32.isa",
@@ -685,9 +805,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/bpf.isa",
@@ -717,9 +843,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     },
     {
       "file": "isa/hexagon.isa",
@@ -749,9 +881,15 @@
         "instruction_selection",
         "vmm",
         "disassembler",
-        "reverse_engineering"
+        "reverse_engineering",
+        "bin2bin"
       ],
-      "op_tooling": "embedded_under_op"
+      "op_tooling": "embedded_under_op.binary_translation",
+      "bin2bin": {
+        "schema_version": 1,
+        "semantic_format": "s-expression",
+        "translation_metadata": "embedded_in_isa_tooling"
+      }
     }
   ],
   "legacy_markers": [
@@ -808,5 +946,6 @@
       ]
     }
   ],
-  "tooling_schema_version": 1
+  "tooling_schema_version": 1,
+  "bin2bin_schema_version": 1
 }
