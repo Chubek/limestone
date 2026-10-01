@@ -1,0 +1,123 @@
+# DebugTk-Modules.yaml
+# Manifest for the DebugTk ("Debugging Toolkit") header-only libraries.
+# Scope: the introspection layer under include/DebugTk — symbol resolution in
+# the current process, stack unwinding, backtrace capture, and software
+# breakpoint management for compilers and interpreters that ship their own
+# debuggers or crash reporters.
+# NOTE: DebugTk depends on InteropTk only (see AGENTS.md section 2).
+
+manifest:
+  name: DebugTk
+  full-name: Debugging Toolkit
+  version: 0.1.0
+  language: C99
+  distribution: header-only
+  include-root: include/DebugTk
+  namespace-prefix: dtk_
+  license: MIT
+  description: >
+    A collection of C99 header-only libraries providing debugging support for
+    compilers and interpreters: address-to-symbol resolution, frame-pointer
+    stack unwinding, backtrace capture, and software breakpoint insertion and
+    removal with a tracer-neutral, state-passing API.
+  companion-manifests:
+    - file: InteropTk-Modules.yaml
+      include-root: include/InteropTk
+      status: documented-separately
+  builds-on:
+    toolkit: InteropTk
+    reason: >
+      DebugTk reuses the InteropTk platform detection, allocator bridging, and
+      string views rather than redefining them.
+
+modules:
+
+  - name: platform
+    header: include/DebugTk/dtk_platform.h
+    summary: >
+      Qualifier and detection shims for DebugTk: defines the DTK_DEF function
+      qualifier macro (user-overridable), the DTK_PAGESIZE fallback constant,
+      and re-exports target architecture macros from InteropTk::platform
+      (DTK_ARCH_X86_64, DTK_ARCH_AARCH64, ...).
+    provides:
+      - DTK_DEF function qualifier macro (user-overridable)
+      - DTK_OS_* / DTK_ARCH_* aliases over the ITK_ detection macros
+      - DTK_PAGESIZE fallback page-size macro constant
+    depends-on:
+      internal: []
+      interoptk: [platform]
+    stability: stable
+
+  - name: types
+    header: include/DebugTk/dtk_types.h
+    summary: >
+      Common DebugTk value types: the dtk_status code and the dtk_bool alias,
+      shared by every module in the subsystem.
+    provides:
+      - dtk_status enum (DTK_OK, DTK_EINVAL, ...)
+    depends-on:
+      internal: [platform]
+      interoptk: [platform]
+    stability: stable
+
+  - name: sym
+    header: include/DebugTk/dtk_sym.h
+    summary: >
+      Address-to-symbol resolution in the current or a traced process: maps an
+      instruction pointer to (module, symbol, offset) via dladdr on POSIX and
+      SymFromAddr-style lookup data on Windows, plus /proc/self/maps parsing
+      helpers for module enumeration.
+    provides:
+      - dtk_sym_info struct and dtk_sym_resolve()
+      - dtk_module_info and dtk_modules_enumerate()
+      - dtk_sym_mangled() / dtk_sym_demangled() accessors
+    depends-on:
+      internal: [platform, types]
+      interoptk: [platform, error, cstring, alloc]
+    stability: stable
+
+  - name: unwind
+    header: include/DebugTk/dtk_unwind.h
+    summary: >
+      Metadata-driven stack unwinding: frame-pointer-based unwinding on targets
+      that keep frame pointers, with an explicit registry so hosts using their
+      own unwind tables (DWARF CFI, EH frames) can plug in alternative walkers.
+      Produces dtk_frame records: pc, frame pointer, stack pointer.
+    provides:
+      - dtk_frame struct and dtk_unwinder registry
+      - dtk_unwind_frame(), dtk_unwind_stack()
+      - dtk_unwinder_register_fp() built-in frame-pointer walker
+    depends-on:
+      internal: [platform, types]
+      interoptk: [platform, ctypes, alloc]
+    stability: experimental
+
+  - name: stack
+    header: include/DebugTk/dtk_stack.h
+    summary: >
+      Backtrace capture and formatting on top of the unwind layer: walks the
+      stack into a caller-supplied buffer, resolves each frame through
+      DebugTk::sym, and renders text backtraces with bounded output.
+    provides:
+      - dtk_backtrace() capture into caller buffer
+      - dtk_backtrace_format() bounded text rendering
+    depends-on:
+      internal: [platform, types, sym, unwind]
+      interoptk: [platform, cstring, alloc]
+    stability: experimental
+
+  - name: breakpoint
+    header: include/DebugTk/dtk_breakpoint.h
+    summary: >
+      Software breakpoints: architecture-aware trap instruction patching
+      (int3 on x86, brk on AArch64) through caller-supplied read/write/commit
+      callbacks so the same API drives self-debugging and ptrace-based
+      tracers. Tracks original bytes per address in a caller-owned table.
+    provides:
+      - dtk_breakpoint table type and dtk_bp_insert()/dtk_bp_remove()
+      - dtk_bp_find(), dtk_bp_hit_address() trap-dispatch helpers
+      - DTK_BREAKPOINT_MAX_TRAPS capacity macro constant
+    depends-on:
+      internal: [platform, types]
+      interoptk: [platform, ctypes, alloc]
+    stability: experimental

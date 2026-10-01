@@ -1,0 +1,2 @@
+(add x zero) => x
+(add zero x) => x

@@ -1,0 +1,64 @@
+# ============================================================================
+# Simdette Meson Build Configuration
+# ============================================================================
+
+project('simdette', 'cpp',
+  version: '0.1.0',
+  license: 'MIT',
+  meson_version: '>= 0.56.0',
+  default_options: ['cpp_std=c++20']
+)
+
+# Options
+simdette_build_tests = option('build_tests', false, type: 'boolean', description: 'Build test suite')
+simdette_install = option('install', false, type: 'boolean', description: 'Install library')
+
+# Include directory
+inc = include_directories('include')
+
+# Compiler flags
+cpp = meson.get_compiler('cpp')
+if cpp.get_id() == 'gcc' or cpp.get_id() == 'gnu'
+  add_project_arguments('-march=native', '-O3', language: 'cpp')
+endif
+
+# ============================================================================
+# Tests (optional)
+# ============================================================================
+
+if simdette_build_tests
+  test_exe = executable('test_comprehensive',
+    'tests/test_comprehensive.cpp',
+    include_directories: inc,
+    install: false
+  )
+  
+  test('tests', test_exe)
+endif
+
+# ============================================================================
+# Installation
+# ============================================================================
+
+if simdette_install
+  # Install headers
+  install_headers(files: 'include/simdette/*.hpp', subdir: 'simdette')
+  install_headers(files: 'include/simdette/arch/**/*.hpp', subdir: 'simdette/arch')
+  install_headers(files: 'include/simdette/core/*.hpp', subdir: 'simdette/core')
+  install_headers(files: 'include/simdette/math/*.hpp', subdir: 'simdette/math')
+  install_headers(files: 'include/simdette/setup/*.hpp', subdir: 'simdette/setup')
+
+  # Install documentation
+    if build_dir != ''
+      install_data('docs/manual/',
+      install_dir: 'share/docs/simdette/manual',
+      subdir: 'simdette'
+    )
+  endif
+
+  # Install manpages (if available)
+  # install_data('docs/man/man3/*.3',
+  #   install_dir: 'share/man/man3',
+  #   subdir: 'simdette'
+  # )
+endif

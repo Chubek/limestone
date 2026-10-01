@@ -1,0 +1,3 @@
+name:algebra
+sort:Expr
+ops:add,mul,pow,neg,zero,one

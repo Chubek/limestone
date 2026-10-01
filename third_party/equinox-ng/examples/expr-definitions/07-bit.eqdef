@@ -1,0 +1,3 @@
+name:bit
+sort:Bits
+ops:andb,orb,xorb,notb,shl,shr

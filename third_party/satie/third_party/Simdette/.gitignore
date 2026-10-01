@@ -1,0 +1,109 @@
+# ==========================================
+# C++ Build Artifacts
+# ==========================================
+*.o
+*.obj
+*.ko
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+*.out
+*.app
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# ==========================================
+# CMake & Build Directories
+# ==========================================
+# Commonly used custom build directories
+build/
+build-*/
+out/
+bin/
+lib/
+
+# CMake specific generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+Testing/
+
+# ==========================================
+# Documentation (Doxygen)
+# ==========================================
+# Ignore the generated documentation from your Doxyfile
+doc/html/
+doc/latex/
+doc/xml/
+doc/man/
+doc/rtf/
+
+# ==========================================
+# IDEs and Code Editors
+# ==========================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# Visual Studio
+.vs/
+CMakeSettings.json
+*.sln
+*.vcxproj
+*.vcxproj.user
+
+# CLion / IntelliJ
+.idea/
+cmake-build-*/
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+
+# ==========================================
+# OS Generated Files
+# ==========================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# Performance Profiling & Coverage
+# ==========================================
+# Gcov / Lcov (useful for tests/benchmarks)
+*.gcno
+*.gcda
+*.gcov
+coverage.info
+coverage/
+perf.data
+perf.data.old
+
+## Doxygen
+docs/doxygen/
+docs/*build*/
+docs/*out*/
+
+AGENTS.md

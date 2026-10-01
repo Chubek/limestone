@@ -1,0 +1,3 @@
+name:logic
+sort:Prop
+ops:and,or,not,imp,iff,true,false

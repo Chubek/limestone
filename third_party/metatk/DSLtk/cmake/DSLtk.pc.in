@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+bindir=${exec_prefix}/@CMAKE_INSTALL_BINDIR@
+generator=${bindir}/dsltk-generate@CMAKE_EXECUTABLE_SUFFIX@
+
+Name: DSLtk
+Description: Header-only C++20 parser runtime (DSLtk.hpp) with the dsltk-generate parser generator
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+

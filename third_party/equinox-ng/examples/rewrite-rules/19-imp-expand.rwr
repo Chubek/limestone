@@ -1,0 +1,1 @@
+(imp a b) => (or (not a) b)

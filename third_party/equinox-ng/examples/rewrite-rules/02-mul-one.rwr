@@ -1,0 +1,2 @@
+(mul x one) => x
+(mul one x) => x

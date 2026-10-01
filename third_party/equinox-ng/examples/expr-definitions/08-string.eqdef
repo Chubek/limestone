@@ -1,0 +1,3 @@
+name:string
+sort:Str
+ops:cat,len,substr,empty

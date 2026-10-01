@@ -1,0 +1,3 @@
+name:cmp
+sort:Cmp
+ops:eq,neq,lt,gt,lte,gte

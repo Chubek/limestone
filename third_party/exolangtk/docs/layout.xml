@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doxygenlayout version="1.0">
+  <navindex>
+    <tab type="mainpage" visible="yes" title="Home"/>
+    <tab type="pages" visible="yes" title="Manual" intro="">
+      <tab type="user" url="@ref manual_01_introduction" title="1. Introduction"/>
+      <tab type="user" url="@ref manual_02_build" title="2. Build Integration"/>
+      <tab type="user" url="@ref manual_03_platform" title="3. Platform Detection"/>
+      <tab type="user" url="@ref manual_04_ctypes" title="4. C Type System"/>
+      <tab type="user" url="@ref manual_05_layout" title="5. Record Layout"/>
+      <tab type="user" url="@ref manual_06_callconv" title="6. Calling Conventions"/>
+      <tab type="user" url="@ref manual_07_mangle" title="7. Symbol Mangling"/>
+      <tab type="user" url="@ref manual_08_cdecl" title="8. C Declaration Parser"/>
+      <tab type="user" url="@ref manual_09_marshal" title="9. Value Marshalling"/>
+      <tab type="user" url="@ref manual_10_cstring" title="10. String Bridging"/>
+      <tab type="user" url="@ref manual_11_error" title="11. Error Handling"/>
+      <tab type="user" url="@ref manual_12_alloc" title="12. Allocator Bridging"/>
+      <tab type="user" url="@ref manual_13_export" title="13. Symbol Export Macros"/>
+      <tab type="user" url="@ref manual_14_ffi_arch" title="14. FFItk: Architecture &amp; Loader"/>
+      <tab type="user" url="@ref manual_15_ffi_call" title="15. FFItk: Calls, Trampolines &amp; Closures"/>
+      <tab type="user" url="@ref manual_16_dtk_sym" title="16. DebugTk: Symbols &amp; Unwinding"/>
+      <tab type="user" url="@ref manual_17_dtk_bp" title="17. DebugTk: Breakpoints"/>
+      <tab type="user" url="@ref manual_18_etk" title="18. ExtensionTk"/>
+    </tab>
+    <tab type="modules" visible="yes" title="Modules" intro=""/>
+    <tab type="namespaces" visible="no" title="">
+      <tab type="namespacelist" visible="no" title="" intro=""/>
+      <tab type="namespacemembers" visible="no" title="" intro=""/>
+    </tab>
+    <tab type="concepts" visible="no" title="">
+    </tab>
+    <tab type="interfaces" visible="no" title="">
+      <tab type="interfacelist" visible="no" title="" intro=""/>
+      <tab type="interfaceindex" visible="no" title=""/>
+      <tab type="interfacehierarchy" visible="no" title="" intro=""/>
+    </tab>
+    <tab type="files" visible="yes" title="Headers"/>
+    <tab type="examples" visible="no" title="" intro=""/>
+  </navindex>
+</doxygenlayout>

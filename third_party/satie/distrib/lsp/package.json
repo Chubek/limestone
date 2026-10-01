@@ -1,0 +1,8 @@
+{
+  "name": "satie-lsp",
+  "version": "0.1.0",
+  "description": "Dependency-free language server for Satie CNF and DIMACS files",
+  "private": true,
+  "bin": {"satie-lsp": "server/index.js"},
+  "engines": {"node": ">=18"}
+}

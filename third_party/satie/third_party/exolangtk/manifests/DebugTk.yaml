@@ -1,0 +1,336 @@
+# manifests/DebugTk-Modules.yaml
+# Source of truth for the DebugTk subsystem of ExolangTk.
+# DebugTk provides header-only C99 libraries for debugging support:
+# process introspection, tracing, symbol resolution, memory diagnostics,
+# and integration with external debuggers (gdb, lldb) and tracers (strace).
+
+toolkit: DebugTk
+version: 0.1.0
+namespace:
+  symbol_prefix: dtk_
+  macro_prefix:  DTK_
+  header_prefix: dtk_
+stability_default: experimental
+
+depends_on_toolkits:
+  - InteropTk   # for type, layout, and platform primitives
+
+modules:
+
+  - name: platform
+    header: include/DebugTk/dtk_platform.h
+    brief: >
+      Compile-time detection of OS, architecture, and debugger-support
+      capabilities. Defines DTK_OS_*, DTK_ARCH_*, and DTK_HAS_* feature
+      macros consumed by every other DebugTk module.
+    stability: stable
+    depends_on: []
+    provides:
+      macros:
+        - DTK_OS_LINUX
+        - DTK_OS_MACOS
+        - DTK_OS_WINDOWS
+        - DTK_ARCH_X86_64
+        - DTK_ARCH_AARCH64
+        - DTK_ARCH_RISCV64
+        - DTK_HAS_PTRACE
+        - DTK_HAS_PROC_FS
+        - DTK_HAS_MACH_TASK
+        - DTK_HAS_DBGHELP
+        - DTK_HAS_LIBUNWIND
+        - DTK_HAS_LIBDWARF
+        - DTK_CACHELINE_SIZE
+
+  - name: types
+    header: include/DebugTk/dtk_types.h
+    brief: >
+      Shared vocabulary types for DebugTk: addresses, byte ranges, process
+      and thread identifiers, register-set descriptors, and status/error codes.
+      Every other module in DebugTk uses these rather than defining its own
+      address or pid typedefs.
+    stability: stable
+    depends_on:
+      - DebugTk::platform
+      - InteropTk::platform
+      - InteropTk::ctypes
+    provides:
+      types:
+        - dtk_addr_t          # target virtual address (uintptr_t-width)
+        - dtk_size_t          # byte count in target address space
+        - dtk_pid_t           # process identifier
+        - dtk_tid_t           # thread identifier
+        - dtk_byte_range      # { dtk_addr_t base; dtk_size_t len; }
+        - dtk_reg_id          # platform register enumeration
+        - dtk_regset          # opaque blob holding a full register context
+        - dtk_status          # function return-status code
+      enums:
+        - DTK_OK
+        - DTK_ERR_INVALID
+        - DTK_ERR_UNSUPPORTED
+        - DTK_ERR_PERM
+        - DTK_ERR_NOT_FOUND
+        - DTK_ERR_IO
+        - DTK_ERR_OOM
+        - DTK_ERR_OVERFLOW
+        - DTK_ERR_TIMEOUT
+
+  - name: attach
+    header: include/DebugTk/dtk_attach.h
+    brief: >
+      Process attachment and detachment: ptrace-based attachment on Linux,
+      task_for_pid on macOS, and DebugActiveProcess on Windows. Provides a
+      uniform dtk_target handle used by all other DebugTk modules that
+      operate on a live process.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+    provides:
+      types:
+        - dtk_target           # opaque handle to an attached process
+        - dtk_attach_opts      # flags: stop-on-attach, follow-forks, etc.
+      functions:
+        - dtk_attach           # attach to an existing process by pid
+        - dtk_attach_spawn     # spawn and attach to a new process
+        - dtk_detach           # detach cleanly; resume the target
+        - dtk_target_pid       # retrieve the pid from a dtk_target
+        - dtk_target_is_alive  # check whether the target is still running
+
+  - name: memory
+    header: include/DebugTk/dtk_memory.h
+    brief: >
+      Read and write the virtual address space of an attached target process.
+      Handles cross-process memory access (process_vm_readv / WriteProcessMemory /
+      vm_read_overwrite) and exposes a uniform dtk_mem_read / dtk_mem_write API
+      with error reporting on partial transfers.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+    provides:
+      functions:
+        - dtk_mem_read         # copy bytes from target VA into local buffer
+        - dtk_mem_write        # copy bytes from local buffer into target VA
+        - dtk_mem_read_str     # read a NUL-terminated string from target VA
+        - dtk_mem_find         # scan a byte range for a pattern
+      types:
+        - dtk_mem_transfer     # result: { dtk_size_t transferred; dtk_status status; }
+
+  - name: registers
+    header: include/DebugTk/dtk_registers.h
+    brief: >
+      Get and set the register context of a thread in an attached target.
+      Abstracts over PTRACE_GETREGS/SETREGS, thread_get_state, and
+      GetThreadContext. Provides named-register accessors so callers never
+      reach into platform-specific structs directly.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+    provides:
+      functions:
+        - dtk_regs_get         # capture full register context for a thread
+        - dtk_regs_set         # restore a register context to a thread
+        - dtk_reg_read         # read one register by dtk_reg_id
+        - dtk_reg_write        # write one register by dtk_reg_id
+        - dtk_reg_pc           # return the program counter from a regset
+        - dtk_reg_sp           # return the stack pointer from a regset
+        - dtk_reg_name         # human-readable name for a dtk_reg_id
+
+  - name: breakpoint
+    header: include/DebugTk/dtk_breakpoint.h
+    brief: >
+      Software and hardware breakpoints. Software breakpoints patch INT 3 /
+      BRK / EBREAK into target memory; hardware breakpoints program debug
+      registers (DR0-DR3 on x86-64, DBGBVR/DBGBCR on AArch64). Provides
+      set, clear, enable, disable, and hit-detection operations on a
+      caller-supplied dtk_bp_table.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+      - DebugTk::memory
+      - DebugTk::registers
+    provides:
+      types:
+        - dtk_bp              # breakpoint descriptor
+        - dtk_bp_table        # caller-managed table of active breakpoints
+        - dtk_bp_kind         # enum: DTK_BP_SOFTWARE, DTK_BP_HARDWARE
+        - dtk_wp_cond         # watchpoint condition: READ, WRITE, RW
+      functions:
+        - dtk_bp_set          # install a breakpoint at a target address
+        - dtk_bp_clear        # remove a breakpoint and restore original bytes
+        - dtk_bp_enable       # re-enable a previously disabled breakpoint
+        - dtk_bp_disable      # temporarily disable without removing
+        - dtk_bp_hit          # test whether a stop event is at a breakpoint
+        - dtk_wp_set          # set a data watchpoint
+        - dtk_wp_clear        # clear a data watchpoint
+
+  - name: unwind
+    header: include/DebugTk/dtk_unwind.h
+    brief: >
+      Stack unwinding for an attached or in-process thread. Consults
+      .eh_frame / .debug_frame DWARF CFI, macOS compact unwind, or
+      Windows __chkstk unwind data to produce a call-chain of
+      (pc, sp, fp) frames without requiring frame pointers.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+      - DebugTk::memory
+      - DebugTk::registers
+    provides:
+      types:
+        - dtk_frame           # { dtk_addr_t pc; dtk_addr_t sp; dtk_addr_t fp; }
+        - dtk_backtrace       # caller-supplied array of dtk_frame + actual depth
+      functions:
+        - dtk_unwind          # unwind from a regset into a dtk_backtrace
+        - dtk_unwind_self     # unwind the calling thread (in-process)
+
+  - name: symbols
+    header: include/DebugTk/dtk_symbols.h
+    brief: >
+      Symbol lookup and address-to-name resolution. Reads ELF symbol tables,
+      Mach-O nlist, and PE/COFF exports. Optionally falls back to DWARF
+      .debug_info for inlined or static symbols. Does not own DWARF parsing;
+      that belongs to the dwarf module.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+      - DebugTk::memory
+    provides:
+      types:
+        - dtk_sym             # { const char *name; dtk_addr_t addr; dtk_size_t size; uint8_t kind; }
+        - dtk_sym_kind        # enum: DTK_SYM_FUNC, DTK_SYM_OBJECT, DTK_SYM_SECTION
+        - dtk_symtab          # opaque handle to a loaded symbol table
+      functions:
+        - dtk_symtab_open     # load symbol table from a mapped image
+        - dtk_symtab_close    # release resources
+        - dtk_sym_lookup      # resolve a name to a dtk_sym
+        - dtk_sym_resolve     # resolve an address to a dtk_sym (nearest)
+        - dtk_sym_demangle    # demangle a C++ / Rust / D symbol name
+
+  - name: dwarf
+    header: include/DebugTk/dtk_dwarf.h
+    brief: >
+      Minimal DWARF consumer for source-level information: compilation unit
+      headers, line-number programs (.debug_line), type information
+      (.debug_info / .debug_abbrev), and location expressions (.debug_loc).
+      Designed to be zero-allocation using caller-supplied buffers, with no
+      dependency on libdwarf or libdw.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::memory
+    provides:
+      types:
+        - dtk_cu              # compilation unit descriptor
+        - dtk_die             # debugging information entry (DIE)
+        - dtk_line_entry      # { dtk_addr_t addr; uint32_t line; uint16_t col; const char *file; }
+        - dtk_dwarf_ctx       # caller-supplied parsing context (no alloc)
+      functions:
+        - dtk_dwarf_init      # initialise a dtk_dwarf_ctx over a memory region
+        - dtk_dwarf_addr2line # map an address to a dtk_line_entry
+        - dtk_dwarf_cu_first  # iterate compilation units
+        - dtk_dwarf_cu_next
+        - dtk_dwarf_die_child # walk the DIE tree
+        - dtk_dwarf_die_sibling
+        - dtk_dwarf_die_attr  # read a named attribute from a DIE
+
+  - name: maps
+    header: include/DebugTk/dtk_maps.h
+    brief: >
+      Virtual memory map enumeration for an attached or self-process:
+      /proc/<pid>/maps on Linux, vm_region_recurse on macOS, and
+      VirtualQueryEx on Windows. Exposes each mapped region as a
+      dtk_map_entry with base, size, permissions, and backing-file path.
+    stability: experi
+emental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+    provides:
+      types:
+        - dtk_map_entry       # { dtk_byte_range range; uint8_t prot; char path[256]; }
+        - dtk_map_prot        # flags: DTK_PROT_READ, DTK_PROT_WRITE, DTK_PROT_EXEC, DTK_PROT_PRIVATE
+        - dtk_map_iter        # opaque iterator structure
+      functions:
+        - dtk_maps_iter_begin # initialize an iterator for a target process
+        - dtk_maps_iter_next  # retrieve the next map entry
+        - dtk_maps_iter_end   # release resources associated with iterator
+
+  - name: process
+    header: include/DebugTk/dtk_process.h
+    brief: >
+      Low-level process lifecycle control and event loop. Handles waiting for
+      events (waitpid, MsgWaitForMultipleObjects), reporting stop reasons
+      (signal delivery, breakpoint hits, system-call entry/exit, segmentation
+      faults, process death), and resuming execution (continue, single-step).
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+    provides:
+      types:
+        - dtk_event           # event descriptor (pid, tid, kind, details)
+        - dtk_event_kind      # enum: DTK_EV_STOP_SIGNAL, DTK_EV_BP_HIT, DTK_EV_SYSCALL, DTK_EV_EXIT
+        - dtk_resume_mode     # enum: DTK_RESUME_CONT, DTK_RESUME_STEP, DTK_RESUME_STEP_INTO_SYSCALL
+      functions:
+        - dtk_process_wait    # wait blockingly or non-blockingly for a process event
+        - dtk_process_resume  # resume process execution with a mode
+        - dtk_process_kill    # force-terminate the target process
+
+  - name: tracer
+    header: include/DebugTk/dtk_tracer.h
+    brief: >
+      System call tracing and monitoring. Provides high-level abstractions
+      to hook system call entry/exit (via PTRACE_O_TRACESYSGOOD, Mach syscall
+      redirection, or Windows debugging events) and unpack system call
+      arguments and return values according to the target's system ABI.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+      - DebugTk::attach
+      - DebugTk::registers
+      - DebugTk::process
+      - InteropTk::layout
+      - InteropTk::cdecl
+    provides:
+      types:
+        - dtk_syscall_info    # { uint64_t nr; dtk_addr_t args[6]; dtk_addr_t ret; dtk_status status; }
+      functions:
+        - dtk_trace_syscalls  # enable system call interception on a target
+        - dtk_syscall_get     # unpack current syscall details from target state
+        - dtk_syscall_set_ret # modify a syscall return value
+        - dtk_syscall_name    # retrieve string name for a syscall number
+
+  - name: integration
+    header: include/DebugTk/dtk_integration.h
+    brief: >
+      Direct integration APIs for general debuggers (GDB/LLDB) and native
+      jit-registration mechanisms (e.g. __jit_debug_register_code). Allows
+      interpreters and compilers using ExolangTk to register runtime-generated
+      code, function names, and frame unwinding data dynamically so the
+      host debugger sees them.
+    stability: experimental
+    depends_on:
+      - DebugTk::platform
+      - DebugTk::types
+    provides:
+      types:
+        - dtk_jit_code_entry  # struct layout matching GDB's __jit_code_entry
+        - dtk_jit_descriptor  # struct layout matching GDB's __jit_descriptor
+      functions:
+        - dtk_jit_register    # register an ELF/Mach-O in-memory image with GDB/LLDB
+        - dtk_jit_unregister  # unregister an entry
+        - dtk_jit_notify      # trigger a debugger event loop breakpoint manually

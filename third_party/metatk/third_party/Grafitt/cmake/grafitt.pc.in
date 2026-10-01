@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+
+Name: grafitt
+Description: Header-first C++20 graph toolkit inspired by OCamlGraph
+Version: @PROJECT_VERSION@
+URL: https://github.com/Chubek/Grafitt
+
+Cflags: -I${includedir} @GRAFITT_PKGCONFIG_EXTRA_CFLAGS@

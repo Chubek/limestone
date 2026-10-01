@@ -1,0 +1,8 @@
+# ============================================================================
+# Simdette CMake Configuration
+# ============================================================================
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/SimdetteTargets.cmake")
+check_required_components(Simdette)

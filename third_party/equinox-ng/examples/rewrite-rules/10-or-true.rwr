@@ -1,0 +1,2 @@
+(or a true) => true
+(or true a) => true

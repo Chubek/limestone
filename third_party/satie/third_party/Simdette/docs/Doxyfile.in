@@ -1,0 +1,36 @@
+PROJECT_NAME           = "@PROJECT_NAME@"
+PROJECT_BRIEF          = "Header-only C++20 SIMD abstraction library"
+OUTPUT_DIRECTORY       = @DOXYGEN_OUTPUT_DIRECTORY@
+
+INPUT                  = @DOXYGEN_INPUT_DIR@/include @DOXYGEN_MANUAL_DIR@
+FILE_PATTERNS          = *.h *.hpp *.hh *.inl *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */build/* */tests/* */examples/*
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+
+GENERATE_HTML          = YES
+GENERATE_XML           = YES
+GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+
+USE_MDFILE_AS_MAINPAGE = @DOXYGEN_MANUAL_DIR@/index.md
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+BUILTIN_STL_SUPPORT    = YES
+
+HTML_OUTPUT            = html
+HTML_DYNAMIC_MENUS     = YES
+GENERATE_TREEVIEW      = YES
+
+FULL_PATH_NAMES        = NO
+STRIP_FROM_PATH        = @DOXYGEN_INPUT_DIR@
+STRIP_FROM_INC_PATH    = @DOXYGEN_INPUT_DIR@/include
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+
+PREDEFINED             = SIMDETTE_ALWAYS_INLINE=inline

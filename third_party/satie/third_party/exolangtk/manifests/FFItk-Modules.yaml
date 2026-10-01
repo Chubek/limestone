@@ -1,0 +1,166 @@
+# FFItk-Modules.yaml
+# Manifest for the FFItk ("Foreign Function Interface Toolkit") header-only libraries.
+# Scope: the dynamic FFI layer under include/FFItk — the components that
+# actually load foreign code, describe and perform foreign calls, generate
+# trampolines, and expose host-callable callbacks.
+# NOTE: The static building-block layer under include/InteropTk is documented
+# separately in InteropTk-Modules.yaml.
+
+manifest:
+  name: FFItk
+  full-name: Foreign Function Interface Toolkit
+  version: 0.1.0
+  language: C99
+  distribution: header-only
+  include-root: include/FFItk
+  namespace-prefix: ffi_
+  license: MIT
+  description: >
+    A collection of C99 header-only libraries providing the dynamic side of
+    interoperability for compilers and interpreters: shared-library loading
+    and symbol resolution, call-interface description, argument packing,
+    invocation via platform calling conventions, closure/callback generation,
+    and executable trampoline memory management.
+  companion-manifests:
+    - file: InteropTk-Modules.yaml
+      include-root: include/InteropTk
+      status: documented-separately
+  builds-on:
+    toolkit: InteropTk
+    reason: >
+      FFItk consumes the static type model, record layout, and calling-
+      convention metadata from InteropTk rather than redefining them.
+
+modules:
+
+  - name: platform
+    header: include/FFItk/ffi_platform.h
+    summary: >
+      Toolchain and qualifier shims for FFItk: defines the FFI_DEF function
+      qualifier macro (user-overridable) and re-exports the target detection
+      macros from InteropTk::platform so FFItk headers need only one portability
+      include.
+    provides:
+      - FFI_DEF function qualifier macro (user-overridable)
+      - FFI_OS_* / FFI_ARCH_* aliases over the ITK_ detection macros
+    depends-on:
+      internal: []
+      interoptk: [platform]
+    stability: stable
+
+  - name: types
+    header: include/FFItk/ffi_types.h
+    summary: >
+      Common FFItk value types: the ffi_status code, the ffi_arg / ffi_sarg
+      word-sized argument slots, and the opaque ffi_value return slot used by
+      the call layer.
+    provides:
+      - ffi_status enum (FFI_OK, FFI_EINVAL, ...)
+      - ffi_arg / ffi_sarg word slots, ffi_value return slot
+    depends-on:
+      internal: [platform]
+      interoptk: [platform]
+    stability: stable
+
+  - name: loader
+    header: include/FFItk/ffi_loader.h
+    summary: >
+      Cross-platform shared-library loading and symbol resolution: dlopen/
+      dlsym on POSIX, LoadLibrary/GetProcAddress on Windows, with a unified
+      handle type and error reporting. The entry point for reaching foreign
+      code at runtime.
+    provides:
+      - ffi_library handle, ffi_open(), ffi_close()
+      - ffi_symbol(), ffi_symbol_optional()
+    depends-on:
+      internal: []
+      interoptk: [platform, mangle, error]
+    stability: stable
+
+  - name: cif
+    header: include/FFItk/ffi_cif.h
+    summary: >
+      The "call interface" descriptor: binds a return type and an ordered
+      list of argument types to a calling convention, precomputing the
+      classification and frame layout needed to make a call. The central
+      object threaded through the rest of FFItk.
+    provides:
+      - ffi_cif descriptor and ffi_cif_prepare()
+      - variadic-call support via ffi_cif_prepare_var()
+    depends-on:
+      internal: []
+      interoptk: [ctypes, layout, callconv]
+    stability: stable
+
+  - name: frame
+    header: include/FFItk/ffi_frame.h
+    summary: >
+      Argument packing and the raw call frame: places arguments into
+      registers and the stack according to a prepared ffi_cif, and retrieves
+      the return value. Handles struct-by-value, sign/zero extension, and
+      return-in-memory conventions.
+    provides:
+      - ffi_frame builder tied to an ffi_cif
+      - ffi_frame_set_arg(), ffi_frame_get_return()
+    depends-on:
+      internal: [cif]
+      interoptk: [ctypes, layout, marshal]
+    stability: experimental
+
+  - name: call
+    header: include/FFItk/ffi_call.h
+    summary: >
+      The invocation entry point: given a prepared ffi_cif, a target function
+      pointer, an array of argument slots, and a return slot, performs the
+      foreign call through the platform's calling convention.
+    provides:
+      - ffi_call() and ffi_call_var()
+      - ffi_arg/ffi_ret slot helpers
+    depends-on:
+      internal: [cif, frame]
+      interoptk: [callconv]
+    stability: stable
+
+  - name: trampoline
+    header: include/FFItk/ffi_trampoline.h
+    summary: >
+      Executable-memory management for generated thunks: allocation of W^X
+      code pages, cache flushing, and lifetime tracking. Underpins the
+      closure layer; usually not called directly by hosts.
+    provides:
+      - ffi_code_alloc(), ffi_code_commit(), ffi_code_free()
+      - ffi_icache_flush()
+    depends-on:
+      internal: []
+      interoptk: [platform, alloc]
+    stability: experimental
+
+  - name: closure
+    header: include/FFItk/ffi_closure.h
+    summary: >
+      Callback generation: produces a C-callable function pointer that, when
+      invoked by foreign code, marshals its arguments back into a host handler
+      per an ffi_cif. Lets interpreters expose their own functions as C
+      callbacks.
+    provides:
+      - ffi_closure, ffi_closure_alloc(), ffi_closure_bind()
+      - ffi_closure_code() to obtain the callable pointer
+    depends-on:
+      internal: [cif, frame, trampoline]
+      interoptk: [ctypes, layout, marshal]
+    stability: experimental
+
+  - name: library
+    header: include/FFItk/ffi_library.h
+    summary: >
+      Convenience layer tying loader + cif + call together: bind a named
+      symbol to a signature once and invoke it repeatedly by a typed handle,
+      caching the prepared call interface. The ergonomic front door for most
+      interpreter integrations.
+    provides:
+      - ffi_binding, ffi_bind() (via ffi_loader + ffi_cif)
+      - ffi_invoke() over a cached binding
+    depends-on:
+      internal: [loader, cif, call]
+      interoptk: [cdecl]
+    stability: stable

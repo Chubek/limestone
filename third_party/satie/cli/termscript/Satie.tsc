@@ -1,0 +1,2 @@
+; TermScript wrapper script for Satie
+(defmodule satie)

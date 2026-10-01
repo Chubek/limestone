@@ -1,0 +1,7 @@
+include(CMakeFindDependencyMacro)
+find_dependency(Python 3.13 COMPONENTS Interpreter Development)
+include("${CMAKE_CURRENT_LIST_DIR}/DomPyBindTargets.cmake")
+function(dompybind_add_module name)
+  Python_add_library(${name} MODULE WITH_SOABI ${ARGN})
+  target_link_libraries(${name} PRIVATE DomPyBind::DomPyBind)
+endfunction()

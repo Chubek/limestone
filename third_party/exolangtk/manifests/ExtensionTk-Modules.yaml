@@ -1,0 +1,136 @@
+# ExtensionTk-Modules.yaml
+# Manifest for the ExtensionTk ("Extension Toolkit") header-only libraries.
+# Scope: the extension-management layer under include/ExtensionTk — dynamic
+# loading of extension modules, versioned extension manifests, dependency-
+# ordered activation, and host-service tables for capability exchange.
+# NOTE: ExtensionTk depends on InteropTk and FFItk only. It must not depend on
+# DebugTk (see AGENTS.md section 2).
+
+manifest:
+  name: ExtensionTk
+  full-name: Extension Toolkit
+  version: 0.1.0
+  language: C99
+  distribution: header-only
+  include-root: include/ExtensionTk
+  namespace-prefix: etk_
+  license: MIT
+  description: >
+    A collection of C99 header-only libraries providing extension management
+    for compilers and interpreters: portable shared-library loading with
+    structured errors, semantic-version parsing and constraints, a registry
+    that activates extensions in dependency order, and host-service tables
+    that extensions consume through stable, versioned capability handles.
+  companion-manifests:
+    - file: InteropTk-Modules.yaml
+      include-root: include/InteropTk
+      status: documented-separately
+    - file: FFItk-Modules.yaml
+      include-root: include/FFItk
+      status: documented-separately
+  builds-on:
+    toolkit: [InteropTk, FFItk]
+    reason: >
+      ExtensionTk reuses InteropTk platform detection, allocators, and string
+      views, and the FFItk loader for the actual dlopen/LoadLibrary work.
+
+modules:
+
+  - name: platform
+    header: include/ExtensionTk/etk_platform.h
+    summary: >
+      Qualifier and detection shims for ExtensionTk: defines the ETK_DEF
+      function qualifier macro (user-overridable) and re-exports the target
+      detection macros from InteropTk::platform.
+    provides:
+      - ETK_DEF function qualifier macro (user-overridable)
+      - ETK_OS_* / ETK_ARCH_* aliases over the ITK_ detection macros
+    depends-on:
+      internal: []
+      interoptk: [platform]
+    stability: stable
+
+  - name: types
+    header: include/ExtensionTk/etk_types.h
+    summary: >
+      Common ExtensionTk value types: the etk_status code and the etk_bool
+      alias, shared by every module in the subsystem.
+    provides:
+      - etk_status enum (ETK_OK, ETK_EINVAL, ...)
+      - etk_bool / ETK_TRUE / ETK_FALSE
+    depends-on:
+      internal: [platform]
+      interoptk: [platform]
+    stability: stable
+
+  - name: dynload
+    header: include/ExtensionTk/etk_dynload.h
+    summary: >
+      Thin, portable wrapper around dlopen/dlsym/dlclose (POSIX) and
+      LoadLibraryEx/GetProcAddress/FreeLibrary (Windows). Provides a uniform
+      etk_lib_handle / etk_sym_handle API with structured error reporting,
+      path-search helpers, and RTLD flag abstraction.
+    provides:
+      - etk_lib_handle / etk_sym_handle types
+      - etk_lib_open(), etk_lib_close(), etk_lib_sym()
+      - etk_lib_sym_optional(), etk_lib_path_search()
+      - ETK_LIB_FLAG_* load-flag abstraction macros
+      - ETK_HAS_DLOPEN / ETK_HAS_LOADLIBRARY feature macros
+      - ETK_PATH_MAX, ETK_SYMNAME_MAX capacity macro constants
+    depends-on:
+      internal: [platform, types]
+      interoptk: [platform, error, cstring, alloc]
+    stability: experimental
+
+  - name: version
+    header: include/ExtensionTk/etk_version.h
+    summary: >
+      Semantic versioning (MAJOR.MINOR.PATCH[-prerelease]) parsing, comparison,
+      and constraint checking ("^1.2.0", ">=2.0.0 <3.0.0", "1.x") so hosts can
+      gate extension compatibility without pulling in a dependency.
+    provides:
+      - etk_version struct (major, minor, patch, prerelease, prerelease_len) and etk_version_parse()
+      - etk_version_compare(), etk_version_fmt()
+      - etk_version_satisfies() constraint checking
+    depends-on:
+      internal: [platform, types]
+      interoptk: []
+    stability: stable
+
+  - name: registry
+    header: include/ExtensionTk/etk_registry.h
+    summary: >
+      Extension registry: registers extension descriptors (id, version,
+      dependencies, entry points), resolves the dependency graph, and
+      activates extensions in topological order through their lifecycle
+      callbacks. All state lives in a caller-supplied registry instance.
+    provides:
+      - etk_extension descriptor (id, version, dependencies, dependency_count, activate, deactivate, ctx, active)
+      - etk_registry instance (entries, count, activation_order, active_count, busy)
+      - etk_registry_init(), etk_registry_register()
+      - etk_registry_activate() topological activation
+      - etk_registry_find(), etk_registry_count()
+      - etk_registry_deactivate_all() reverse-order teardown
+      - ETK_REGISTRY_MAX_EXTENSIONS capacity macro constant
+    depends-on:
+      internal: [platform, types, version]
+      interoptk: []
+    stability: experimental
+
+  - name: api
+    header: include/ExtensionTk/etk_api.h
+    summary: >
+      Host-service tables: the mechanism by which a runtime exposes versioned
+      services (allocator, logger, symbol lookup, FFI calls) to loaded
+      extensions. Services are looked up by (name, version-range) and returned
+      as typed function-pointer slots, so the ABI surface stays stable while
+      implementations evolve.
+    provides:
+      - etk_service descriptor and etk_service_table
+      - etk_service_table_init(), etk_service_register()
+      - etk_service_lookup() with version constraint
+      - etk_api_probe() capability query for extensions
+    depends-on:
+      internal: [platform, types, version]
+      interoptk: [platform, cstring]
+    stability: experimental

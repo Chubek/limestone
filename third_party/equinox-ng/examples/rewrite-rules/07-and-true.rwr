@@ -1,0 +1,2 @@
+(and a true) => a
+(and true a) => a
