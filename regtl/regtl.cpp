@@ -1,10 +1,14 @@
 #include "regtl.hpp"
 namespace limestone::regtl {
 Result<Allocation> linear_scan(const Program&p){
+ std::unordered_set<VReg> seen;
+ for(auto&r:p.ranges){if(r.begin>r.end)return Result<Allocation>::err({Error::Code::InvalidArgument,"live range begins after it ends"});if(!seen.insert(r.value).second)return Result<Allocation>::err({Error::Code::InvalidArgument,"duplicate virtual register"});}
  auto rs=p.ranges;std::sort(rs.begin(),rs.end(),[](auto&a,auto&b){return a.begin<b.begin|| (a.begin==b.begin&&a.value<b.value);});
  Allocation a;struct Active{VReg v;uint32_t end;PReg r;};std::vector<Active> active;
  auto expire=[&](uint32_t b){active.erase(std::remove_if(active.begin(),active.end(),[&](auto&x){if(x.end<b)return true;return false;}),active.end());};
  for(auto&r:rs){expire(r.begin);std::vector<PReg> avail;for(auto&c:p.classes)if(c.name==r.klass)avail=c.members;
+ if(avail.empty()) return Result<Allocation>::err({Error::Code::InvalidArgument,"unknown or empty register class: "+r.klass});
+ if(!r.constraint.allowed.empty()){std::vector<PReg> filtered;for(auto x:avail)if(std::find(r.constraint.allowed.begin(),r.constraint.allowed.end(),x)!=r.constraint.allowed.end())filtered.push_back(x);avail.swap(filtered);}
  for(auto x:r.constraint.forbidden)avail.erase(std::remove(avail.begin(),avail.end(),x),avail.end());
  if(r.constraint.fixed){if(std::any_of(active.begin(),active.end(),[&](auto&x){return x.r==*r.constraint.fixed;})) {if(!r.spillable)return Result<Allocation>::err({Error::Code::Unsatisfiable,"fixed register conflict"});a.spilled.push_back(r.value);continue;}a.regs[r.value]=*r.constraint.fixed;active.push_back({r.value,r.end,*r.constraint.fixed});continue;}
  avail.erase(std::remove_if(avail.begin(),avail.end(),[&](PReg x){return std::any_of(active.begin(),active.end(),[&](auto&a){return a.r==x;});}),avail.end());

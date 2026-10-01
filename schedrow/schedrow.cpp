@@ -3,8 +3,8 @@
 namespace limestone::schedrow {
 Result<std::vector<Scheduled>> schedule(const Region&r,const MachineModel&m){
  std::unordered_map<InstrId,uint32_t> indeg; std::unordered_map<InstrId,std::vector<const Dependency*>> out;
- for(auto&i:r.instructions)indeg[i.id]=0;
- for(auto&d:r.deps){++indeg[d.consumer];out[d.producer].push_back(&d);}
+ for(auto&i:r.instructions){if(indeg.contains(i.id))return Result<std::vector<Scheduled>>::err({Error::Code::InvalidArgument,"duplicate instruction id"});indeg[i.id]=0;}
+ for(auto&d:r.deps){if(!indeg.contains(d.producer)||!indeg.contains(d.consumer))return Result<std::vector<Scheduled>>::err({Error::Code::InvalidArgument,"dependency references unknown instruction"});++indeg[d.consumer];out[d.producer].push_back(&d);}
  std::vector<InstrId> ready;for(auto&[id,n]:indeg)if(!n)ready.push_back(id);std::sort(ready.begin(),ready.end());
  std::unordered_map<InstrId,uint32_t> cycle;std::vector<Scheduled> result;
  std::unordered_map<std::string,std::unordered_map<uint32_t,uint32_t>> used;
