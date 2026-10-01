@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/openaippTargets.cmake")
+
+set(_openaipp_include_dir "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+if(EXISTS "${_openaipp_include_dir}")
+  set_property(TARGET openaipp::openaipp APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${_openaipp_include_dir}")
+endif()

@@ -182,7 +182,7 @@ Termscript is a substrate of Termlib that provides the user with a Turing-comple
 
 Termscript also exposes an *native extension ABI/API* which allows for implementation of modules in C. Several modules are provided, as standard library for Termscript.
 
-Termscript is parsed by compiling `termscript/Termscript.g` with `/mnt/warble/domweave/scripts/aurocks.pl`.
+Termscript is parsed by compiling `termscript/Termscript.g` with `/mnt/warble/domweave/scripts/third_party/dparser`.
 
 It is possible to recompile a Terminfo profile into Termscript leveraging the `std.terminfo.compile` module:
 

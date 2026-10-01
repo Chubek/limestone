@@ -1,0 +1,7 @@
+#include "unisel.hpp"
+namespace limestone::unisel {
+std::vector<Candidate> match(const Program&p,const std::vector<Pattern>&ps){std::unordered_map<NodeId,const Node*> m;for(auto&n:p.nodes)m[n.id]=&n;std::vector<Candidate> out;for(auto&n:p.nodes)for(auto&pat:ps)if(n.op==pat.root_op&&pat.operands.size()==n.inputs.size()){Candidate c{pat.id,n.id,{n.id},pat.cost,pat.name};for(auto id:n.inputs)c.covered.push_back(id);out.push_back(std::move(c));}std::sort(out.begin(),out.end(),[](auto&a,auto&b){return std::tie(a.root,a.cost,a.pattern)<std::tie(b.root,b.cost,b.pattern);});return out;}
+Result<Selection> solve_greedy(const Program&p,const std::vector<Pattern>&ps){auto cs=match(p,ps);Selection s;std::unordered_set<NodeId> covered;while(covered.size()<p.nodes.size()){const Candidate*best=nullptr;for(auto&c:cs){bool useful=false;for(auto n:c.covered)if(!covered.count(n))useful=true;if(useful&&(!best||c.cost<best->cost||(c.cost==best->cost&&c.pattern<best->pattern)))best=&c;}if(!best)break;s.selected.push_back(*best);s.cost+=best->cost;covered.insert(best->covered.begin(),best->covered.end());}if(covered.size()!=p.nodes.size())return Result<Selection>::err({Error::Code::Unsatisfiable,"not all program nodes are covered"});return Result<Selection>::ok(std::move(s));}
+}
+
+namespace limestone::unisel { Result<Selection> solve(const Program&, const std::vector<Pattern>&){ return Result<Selection>::err({Error::Code::Unsupported,"Unisel requires the configured Satie solver backend"}); } }

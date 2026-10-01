@@ -1,0 +1,5 @@
+aggregate in "my-graphs/friendship-graph.gbin" {
+  count vertices
+  where contains Friend:
+  by vertex_type
+}

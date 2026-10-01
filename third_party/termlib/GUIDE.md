@@ -7,7 +7,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
 ```
 
-CMake generates the Termscript parser from `termscript/Termscript.g` with `scripts/aurocks.pl`. The standard library is built from the sources in `third_party/tomlc99` and `third_party/isocline`.
+CMake generates the Termscript parser from `termscript/Termscript.g` with `scripts/third_party/dparser`. The standard library is built from the sources in `third_party/tomlc99` and `third_party/isocline`.
 
 ## 2. Run Termscript
 

@@ -1,0 +1,2 @@
+call ezdox#syntax#enable()
+

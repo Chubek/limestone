@@ -1,5 +1,0 @@
-module Arithmetic {
-    Expr = Add(Expr left, Number right) [tag Expr_1]
-         | Wrap(Number number) [tag Expr_2]
-    Number = Integer(int value) [tag Number]
-}

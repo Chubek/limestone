@@ -1,0 +1,135 @@
+*ezdox.txt*  EZDox Vim addon
+
+==============================================================================
+CONTENTS                                                        *ezdox-contents*
+
+1. Overview                                                     |ezdox-overview|
+2. Commands                                                     |ezdox-commands|
+3. Mappings                                                     |ezdox-mappings|
+4. Syntax                                                       |ezdox-syntax|
+5. Installation                                                 |ezdox-install|
+
+==============================================================================
+OVERVIEW                                                        *ezdox-overview*
+
+The EZDox Vim addon helps author C and C++ Doxygen-style docstrings for
+projects that use EZDox.  It is written in Vimscript and works in Vim and
+Neovim.
+
+The plugin reads the command inventory from:
+>
+  $EZDOX_HOME/manifests/doxygen-commands.yaml
+<
+If that file is not installed, a compact built-in list is used.
+
+==============================================================================
+COMMANDS                                                        *ezdox-commands*
+
+                                                        *:EZDoxDocBlock*
+:EZDoxDocBlock [kind]
+        Insert a boilerplate documentation block above the cursor.
+
+        Supported kinds:
+>
+  function
+  class
+  file
+  field
+<
+        Example:
+>
+  :EZDoxDocBlock function
+<
+
+                                                        *:EZDoxCommand*
+:EZDoxCommand [command]
+        Insert a Doxygen command at the cursor.  Completion is populated from
+        the installed Doxygen command manifest when available.
+
+        Example:
+>
+  :EZDoxCommand @brief
+<
+
+                                                        *:EZDoxCommands*
+:EZDoxCommands
+        Open a scratch buffer listing known Doxygen commands.
+
+                                                        *:EZDoxValidate*
+:EZDoxValidate [config]
+        Run:
+>
+  ezdox-cli config validate -C {config}
+<
+        If {config} is omitted, the plugin searches for EZDox.yaml, EZDox.yam,
+        EZDox.json, EZDox.sexp, and EZDox.xml in the current directory.
+
+==============================================================================
+MAPPINGS                                                        *ezdox-mappings*
+
+The plugin defines <Plug> mappings but does not bind keys by default.
+
+>
+  <Plug>(ezdox-doc-function)
+  <Plug>(ezdox-doc-class)
+  <Plug>(ezdox-doc-file)
+  <Plug>(ezdox-commands)
+<
+
+Example user mappings:
+>
+  nmap <leader>df <Plug>(ezdox-doc-function)
+  nmap <leader>dc <Plug>(ezdox-doc-class)
+  nmap <leader>di <Plug>(ezdox-commands)
+<
+
+==============================================================================
+SYNTAX                                                            *ezdox-syntax*
+
+The addon installs syntax hooks for C and C++ after-syntax files.  Doxygen
+commands are highlighted only inside documentation comments:
+>
+  /// @brief one-line documentation
+  /**
+   * @param value described parameter
+   * @return described result
+   */
+<
+
+Recognized comment forms include:
+>
+  ///
+  ///<
+  /**
+  /*!
+<
+
+==============================================================================
+INSTALLATION                                                    *ezdox-install*
+
+Use the included installer:
+>
+  ./addons/vim/install.sh --vim
+  ./addons/vim/install.sh --nvim
+  ./addons/vim/install.sh --vim --nvim
+<
+
+The installer copies plugin files to:
+>
+  $XDG_CONFIG_HOME/vim
+  $XDG_CONFIG_HOME/nvim
+<
+When XDG_CONFIG_HOME is unset, ~/.config is used.
+
+After installing for Vim, run:
+>
+  :helptags ~/.config/vim/doc
+<
+For Neovim, run:
+>
+  :helptags ~/.config/nvim/doc
+<
+
+==============================================================================
+vim:tw=78:ts=8:noet:ft=help:norl:
+

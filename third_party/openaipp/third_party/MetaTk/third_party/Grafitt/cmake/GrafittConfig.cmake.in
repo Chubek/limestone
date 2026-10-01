@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/GrafittTargets.cmake")
+
+set(Grafitt_INCLUDE_DIR "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+set(Grafitt_INCLUDE_DIRS "${Grafitt_INCLUDE_DIR}")
+
+# The two optional integrations are auto-detected by Grafitt.hpp via
+# __has_include, so they are never hard requirements at the package level.
+check_required_components(Grafitt)

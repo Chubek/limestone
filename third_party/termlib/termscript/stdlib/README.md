@@ -91,7 +91,7 @@ are new public API in `termscript.h`. Imports execute in the
 caller's scope (bindings persist — that is the export mechanism),
 share output and the step budget, resolve through VM search paths
 plus `TERMSCRIPT_PATH`, and reject cycles. The aurocks grammar
-(`Termscript.g`) and `scripts/aurocks.pl` are untouched.
+(`Termscript.g`) and `scripts/third_party/dparser` are untouched.
 
 ## Built with
 

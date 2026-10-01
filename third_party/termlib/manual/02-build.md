@@ -1,6 +1,6 @@
 # Chapter 02: Building
 
-The generated parser is produced from `termscript/Termscript.g` by `scripts/aurocks.pl`; CMake makes this a build dependency.
+The generated parser is produced from `termscript/Termscript.g` by `scripts/third_party/dparser`; CMake makes this a build dependency.
 
 ## Scope
 
