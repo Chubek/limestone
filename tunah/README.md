@@ -123,6 +123,7 @@ register facts. The 13 tuner files contain 239 rules.
 The vocabulary is a syntax contract. The caller's IL adapter still establishes
 types, purity, memory ordering, control flow, lane shapes, and reconstruction
 legality. Generic term saturation does not itself implement those IL adapters.
+The concrete typed Unisel graph adapter is described below.
 Arithmetic corpus checks cover 8-, 16-, 32-, and 64-bit wrapping integers with
 modulo-width shift counts and the explicitly wrapped signed-division overflow
 model. These semantics must be supplied by the host, not inferred from an ISA.
@@ -155,3 +156,94 @@ Use repeatable `--op-cost OP COST`, `--literal-cost COST`, `--iterations N`,
 to stdout or the file named by `-o`.
 
 Before/after workload measurements are recorded in `BENCHMARKS.md`.
+
+## Lifted Bin2Bin semantic adapter
+
+The binary adapter in `binary_adapter.hpp` / `Limestone::tunah_bin2bin` optimizes
+Bin2Bin's lifted instruction semantics through the same Session engine. It takes
+an explicit host legality analysis and semantic/analysis identity, snapshots rules
+and options, checks ingress and extraction, and returns a `SemanticTransform`
+consumed before target matching/relaxation. Cache identity automatically includes
+operators, rules, conditions, costs and budgets; cooperative time/cancellation
+limits disable translated-byte cache reuse. It preserves instruction boundaries,
+control classifications and direct targets. Usage is in `bin2bin/README.md`.
+Region/CFG-changing binary optimization remains a distinct adapter boundary.
+
+## Typed Unisel graph adapter
+
+`unisel_adapter.hpp` / `Limestone::tunah_unisel` provides
+`optimize_graph(program, session, options)`. `GraphAdapterOptions::operators`
+registers a graph opcode, term operator, concrete type, arity, and optional
+commutativity. Only explicitly registered pure operators are optimized. The host
+supplies semantically justified rules for those concrete types; no width,
+overflow, alias, or target facts are guessed from opcode names.
+
+The adapter validates ingress, retains shared inputs as boundary identities,
+saturates/extracts through Equinox-NG, validates the complete typed extraction,
+and transactionally reconstructs/remaps graph values. Commutative equivalence is
+admitted explicitly so canonical operand order does not hide directional rules.
+Generated nodes retain deterministic root provenance and block identity. Effects,
+semantic dependencies, CFG/control, external inputs, and live-outs are preserved.
+Dead nodes are pruned only within the explicitly pure vocabulary.
+
+`GraphOptimization` returns the program, value remapping, rewrite count, and limit
+status. A `PipelineTarget::optimizer` can consume that result. Additional stage ILs,
+full preprocessing source maps, preemption inside vendor operations, and complete
+e-node derivation provenance remain integration boundaries.
+
+## C and Python embedding
+
+`limestone/optimization.h` exposes opaque Tunah sessions/results through
+`Limestone::optimization`, without Equinox-NG or parser implementation types.
+
+```c
+#include <limestone/optimization.h>
+
+limestone_error error;
+limestone_optimizer *optimizer = limestone_optimizer_create(&error);
+if (!optimizer) return 1;
+if (limestone_optimizer_load_rules(optimizer,
+    "(operator add 2)(rule zero (add ?x 0) ?x)", "scalar.rules", &error)) {
+    limestone_optimizer_destroy(optimizer);
+    return 1;
+}
+limestone_optimization *result = limestone_optimizer_saturate(
+    optimizer, "(add 42 0)", "input.term", &error);
+limestone_optimizer_destroy(optimizer);
+if (!result) return 1;
+/* limestone_optimization_expression(result) is "42". */
+limestone_optimization_destroy(result);
+```
+
+Operator signatures and rule loads use the same transactional C++ Session.
+Non-negative costs and positive node/class budgets are explicit; zero iterations
+is extraction-only. Checked callback errors retain status codes. Predicates
+receive borrowed canonical equivalent terms and must report only proved
+preconditions. An optional release adopts userdata on successful registration
+and runs once after the last source/target/active-run snapshot. Cancellation is
+cooperative and allows valid extraction when a budget stops saturation.
+
+For pipeline graph optimization, declare pure concrete operators with
+`limestone_optimizer_define_graph_operator` and call
+`limestone_target_set_optimizer(target, optimizer, &error)` from `Limestone::core`.
+The target snapshots the rules, typed declarations, costs, limits, callbacks and
+origins. Source handle mutation/destruction does not change that attachment;
+pipeline `optimize=0` skips it. Effects, semantic edges, shared values, CFGs and
+live-outs retain the typed graph adapter's contracts.
+
+The optional Python module provides context-managed `Optimizer` and
+`Optimization` wrappers; see `bindings/README.md`.
+
+`limestone_optimizer_binary_transform` creates an owning lifted-semantic transform
+through the existing binary adapter. A mandatory C legality callback receives
+the original supported instruction (address, semantics, control and optional
+branch target) and a canonical candidate term at ingress and after extraction.
+The supplied context identity versions host analyses/semantics; the session's
+rules, operators, costs and limits are included automatically. Static
+`limestone_binary_translate_with_transform` and runtime
+`limestone_runtime_create_with_transform` in `Limestone::core` copy the transform
+before use. Original handles can be destroyed independently. Deadline/cancellation
+snapshots disable byte-cache and resident reuse, while observation heat and
+immutable retained code remain valid. C regressions independently execute both
+equivalent counter encodings, verify reentrant invalidation and release ownership,
+and reject failed/non-Boolean legality proofs.

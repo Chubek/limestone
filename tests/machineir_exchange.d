@@ -1,0 +1,58 @@
+import machineir;
+import std.file : readText, write;
+import std.exception : enforce, assertThrown;
+import std.string : indexOf;
+import std.json : JSONValue, parseJSON, toJSON;
+
+int main(string[] args) {
+    enforce(args.length==7,"expected region, CFG and spill exchange paths");
+    auto exchange=readExchange(readText(args[1]));auto f=exchange.program.functions[0];auto b=f.blocks[0];
+    enforce(exchange.program.config.name=="portable-machineir"&&b.instructions.length==2);
+    enforce(b.instructions[0].operands[0].integer==42&&b.instructions[1].operands[0].registerRef.name=="v1");
+    auto live=analyzeLiveness(f);enforce(live.blocks[0].after[0].length==1&&live.blocks[0].after[0][0].name=="v1");
+    enforce(exchange.instructionId(0)==1&&exchange.physicalRegister(1).isNull);
+    enforce(exchange.instructionContract(0).indexOf("const.i64")>=0);
+    auto copy=readExchange(writeExchange(exchange));enforce(dump(copy.program.functions[0])==dump(f));
+    auto corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["throughput"]=JSONValue("0");assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["early_defs"]=JSONValue([JSONValue(999)]);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][1]["defs"]=corrupt["instructions"][0]["defs"];assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["latency"]=JSONValue(10);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["latency"]=JSONValue(0);corrupt["schedule"][1]["cycle"]=JSONValue(0);readExchange(toJSON(corrupt));auto priorIssue=corrupt["schedule"][0];corrupt["schedule"][0]=corrupt["schedule"][1];corrupt["schedule"][1]=priorIssue;assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["schedule"][1]["cycle"]=JSONValue(10);readExchange(toJSON(corrupt));priorIssue=corrupt["schedule"][0];corrupt["schedule"][0]=corrupt["schedule"][1];corrupt["schedule"][1]=priorIssue;assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["future"]=JSONValue(true);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["result_latency"]=JSONValue(["01":JSONValue(0)]);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["latency"]=JSONValue(4);corrupt["instructions"][0]["result_latency"]=JSONValue(["1":JSONValue(0)]);corrupt["instructions"][0]["implicit_defs"]=JSONValue([JSONValue(1)]);corrupt["instructions"][1]["implicit_uses"]=JSONValue([JSONValue(1)]);corrupt["schedule"][1]["cycle"]=JSONValue(2);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt["instructions"][0]["implicit_result_latency"]=JSONValue(["1":JSONValue(2)]);readExchange(toJSON(corrupt));
+    corrupt["instructions"][0]["issue_slots"]=JSONValue([JSONValue(0)]);corrupt["schedule"][0]["slot"]=JSONValue(1);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));corrupt["schedule"][0]["slot"]=JSONValue(0);readExchange(toJSON(corrupt));
+    corrupt=parseJSON(readText(args[1]));corrupt["instructions"][1]["uses"]=JSONValue(cast(JSONValue[])[]);corrupt["instructions"][1]["terminator"]=JSONValue(false);corrupt["instructions"][1]["control"]=JSONValue("none");corrupt["dependencies"]=JSONValue(cast(JSONValue[])[]);corrupt["schedule"][0]["cycle"]=JSONValue(5);corrupt["schedule"][1]["cycle"]=JSONValue(0);corrupt["instructions"][0]["implicit_uses"]=JSONValue([JSONValue(17)]);corrupt["instructions"][1]["implicit_defs"]=JSONValue([JSONValue(17)]);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    assertThrown!Exception(readExchange("{\"schema\":\"wrong\",\"version\":1}"));
+    auto repeated=readText(args[1]);assertThrown!ExchangeError(readExchange("{\"schema\":\"limestone.machineir.region\","~repeated[1..$]));
+    assertThrown!ExchangeError(readExchange("{\"\\u0073chema\":\"limestone.machineir.region\","~repeated[1..$]));
+    auto empty=RegionExchange.init;assertThrown!ExchangeError(writeExchange(empty));
+    auto nullFunction=readExchange(repeated);nullFunction.program.functions[0]=null;assertThrown!ExchangeError(writeExchange(nullFunction));
+    assertThrown!ExchangeError(exchange.instructionId(999));
+    auto grouped=parseJSON(writeExchange(exchange));grouped["version"]=JSONValue(3);
+    grouped["groups"]=JSONValue([JSONValue(["id":JSONValue(5),"kind":JSONValue("adjacent"),"members":JSONValue([JSONValue(1),JSONValue(2)]),"name":JSONValue("result"),"origin":JSONValue("fixture"),"pattern":JSONValue("produce-return"),"benefit":JSONValue(2),"issue_width":JSONValue(0),"issue_slots":JSONValue(cast(JSONValue[])[])])]);
+    auto grouping=readExchange(toJSON(grouped));enforce(grouping.groupCount==1&&grouping.groupContract(0).indexOf("produce-return")>=0);assertThrown!ExchangeError(grouping.groupContract(99));
+    auto invalidGroup=parseJSON(toJSON(grouped));invalidGroup["version"]=JSONValue(2);assertThrown!ExchangeError(readExchange(toJSON(invalidGroup)));
+    invalidGroup=parseJSON(toJSON(grouped));invalidGroup["groups"][0]["members"]=JSONValue([JSONValue(2),JSONValue(1)]);assertThrown!ExchangeError(readExchange(toJSON(invalidGroup)));
+    invalidGroup=parseJSON(toJSON(grouped));invalidGroup["groups"][0]["kind"]=JSONValue("same_cycle");invalidGroup["schedule"][1]["cycle"]=JSONValue(1);assertThrown!ExchangeError(readExchange(toJSON(invalidGroup)));
+    exchange=grouping;f=exchange.program.functions[0];b=f.blocks[0];
+    b.instructions[0].operands[0].integer=43;write(args[2],writeExchange(exchange));
+    b.instructions[0].effects.mayTrap=true;assertThrown!ExchangeError(writeExchange(exchange));
+    auto cfg=readExchange(readText(args[3]));auto graph=cfg.program.functions[0];
+    enforce(graph.blocks.length==3&&graph.blocks[0].id==7&&graph.blocks[1].id==9&&graph.blocks[2].id==3);
+    enforce(graph.blocks[0].instructions[1].effects.control==ControlFlowKind.conditionalBranch);
+    enforce(graph.blocks[0].instructions[1].operands[1].blockId==3&&graph.blocks[0].instructions[1].operands[2].blockId==9);
+    auto cfgCopy=readExchange(writeExchange(cfg));enforce(dump(graph)==dump(cfgCopy.program.functions[0]));
+    corrupt=parseJSON(readText(args[3]));auto lastIssue=corrupt["schedule"].array.length-1;priorIssue=corrupt["schedule"][0];corrupt["schedule"][0]=corrupt["schedule"][lastIssue];corrupt["schedule"][lastIssue]=priorIssue;assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[3]));corrupt["instructions"][1]["block_targets"]=JSONValue([JSONValue(9)]);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    corrupt=parseJSON(readText(args[3]));corrupt["instructions"][5]["uses"]=corrupt["instructions"][3]["uses"];assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
+    graph.blocks[2].instructions[0].operands[0].integer=43;write(args[4],writeExchange(cfg));
+    graph.blocks[0].successors[0]=9;assertThrown!ExchangeError(writeExchange(cfg));
+    auto spilled=readExchange(readText(args[5]));enforce(spilled.frameSize>0&&spilled.spillFrameContract.indexOf("offset")>=0);
+    auto spillFunction=spilled.program.functions[0];bool hasLoad,hasStore,edited;
+    foreach(ref i;spillFunction.blocks[0].instructions){hasLoad|=i.opcode.name=="RELOAD";hasStore|=i.opcode.name=="SPILL";if(i.opcode.name=="CONST"&&i.operands[0].integer==7){i.operands[0].integer=8;edited=true;}}
+    enforce(hasLoad&&hasStore&&edited);auto returned=writeExchange(spilled);enforce(readExchange(returned).frameSize==spilled.frameSize);write(args[6],returned);
+    return 0;
+}

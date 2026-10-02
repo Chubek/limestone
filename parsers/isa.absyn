@@ -19,10 +19,11 @@ node Fields { Field* entries; }
 node Field { FieldName name; Value? value_data; Object? object; Fields? fields; }
 node FieldName { Ident name; Number* bounds; }
 sum Value = String | Number | Boolean | Array | Object | SExpr | CallList | BareList;
-node Array { Value* items; }
+node Array { ArrayValue* items; }
+sum ArrayValue = String | Number | Boolean | Array | Object | SExpr | Call | Ident;
 node Object { Fields fields; }
 node CallList { Call* calls; }
-node Call { Ident name; Value* arguments; }
+node Call { Ident name; ArrayValue* arguments; }
 node SExpr { SExprItem* items; }
 sum SExprItem = String | Number | Ident | SExpr;
 token Boolean;

@@ -80,7 +80,7 @@
           },
           "tooling": {
             "type": "object",
-            "description": "Architecture-level tooling metadata emitted in each .isa file, including the Bin2Bin translation contract."
+            "description": "Architecture-level tooling metadata emitted in each .isa file, including the Bin2Bin translation contract and optional object_file contract (object-file.schema.json)."
           },
           "op_tooling": {
             "type": "object",

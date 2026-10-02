@@ -96,9 +96,23 @@ void check(const E& e,std::set<std::string> bound,std::set<const Expr*>& visitin
 struct Environment;
 struct Closure { E expression; std::shared_ptr<const Environment> environment; };
 struct Environment { std::map<std::string,Closure> bindings; };
-struct Value { std::optional<int64_t> integer; Closure function; std::string primitive; };
+struct Value { std::optional<int64_t> integer; Closure function; std::string primitive;std::optional<uint32_t> trace_value; };
 struct Evaluator {
   size_t remaining;
+  const ExecutionOptions& options;
+  ExecutionResult execution;
+  uint64_t next_value=1;
+  size_t events=0;
+  std::optional<uint32_t> record(TraceEvent::Kind kind,const E& e,std::string operation={},std::optional<int64_t> result={},std::vector<uint32_t> inputs={},std::optional<bool> taken={}) {
+    if(!options.record_trace&&!options.observer)return {};
+    if(events++>=options.event_limit)fail(e,"trace event limit reached",Error::Code::ResourceLimit);
+    TraceEvent event{kind,execution.steps,e->offset,e->line,e->column,std::move(operation),{},std::move(inputs),result,taken};
+    if(result&&(kind==TraceEvent::Kind::Integer||kind==TraceEvent::Kind::Primitive)) {
+      if(next_value>UINT32_MAX)fail(e,"trace value identity overflow",Error::Code::ResourceLimit);event.value=static_cast<uint32_t>(next_value++);
+    }
+    if(options.observer)options.observer(event);
+    auto value=event.value;if(options.record_trace)execution.trace.push_back(std::move(event));return value;
+  }
   int64_t primitive(const E& e,const std::string& op,const std::vector<int64_t>& args) {
       auto a=args[0],b=args.size()>1?args[1]:0;int64_t result=0;
       const auto min=std::numeric_limits<int64_t>::min(),max=std::numeric_limits<int64_t>::max();
@@ -120,6 +134,7 @@ struct Evaluator {
       std::vector<int64_t> values;
       std::string primitive;
       size_t next=0;
+      std::vector<uint32_t> trace_inputs;
     };
     Closure control{initial,std::move(initial_env)};
     std::vector<Closure> arguments;
@@ -128,17 +143,21 @@ struct Evaluator {
     // Krivine transitions use an explicit argument/continuation stack. Even
     // divergent terms consume the step budget without exhausting the C++ stack.
     for(;;) {
+      if(options.cancelled&&options.cancelled())fail(control.expression,"execution cancelled",Error::Code::ResourceLimit);
       if(returned) {
         if(continuations.empty())return std::move(*returned);
         auto& frame=continuations.back();
         if(frame.kind==Continuation::Kind::Primitive) {
           if(!returned->integer)fail(frame.owner.expression,"primitive requires integer operands");
           frame.values.push_back(*returned->integer);
+          if(returned->trace_value)frame.trace_inputs.push_back(*returned->trace_value);
           if(frame.next<frame.operands.size()){control=frame.operands[frame.next++];returned.reset();continue;}
           auto result=primitive(frame.owner.expression,frame.primitive,frame.values);
-          arguments=std::move(frame.pending);continuations.pop_back();returned=Value{result,{},{}};
+          auto traced=record(TraceEvent::Kind::Primitive,frame.owner.expression,frame.primitive,result,std::move(frame.trace_inputs));
+          arguments=std::move(frame.pending);continuations.pop_back();returned=Value{result,{},{},traced};
         }else if(frame.kind==Continuation::Kind::If) {
           if(!returned->integer)fail(frame.owner.expression,"conditional requires an integer");
+          record(TraceEvent::Kind::Branch,frame.owner.expression,"if",{},returned->trace_value?std::vector<uint32_t>{*returned->trace_value}:std::vector<uint32_t>{},bool(*returned->integer));
           control={frame.owner.expression->children[*returned->integer?1:2],frame.owner.environment};
           arguments=std::move(frame.pending);continuations.pop_back();returned.reset();
         }else {
@@ -150,12 +169,14 @@ struct Evaluator {
       const auto e=control.expression;auto env=control.environment;
       if(!remaining)fail(e,"evaluation step limit reached",Error::Code::ResourceLimit);
       --remaining;
+      ++execution.steps;
       if(e->kind==Expr::Kind::Apply) {
+        record(TraceEvent::Kind::Apply,e);
         for(size_t i=e->children.size();i>1;--i)arguments.push_back({e->children[i-1],env});
         control={e->children[0],env};continue;
       }
       if(e->kind==Expr::Kind::Symbol) {
-        if(env)if(auto it=env->bindings.find(e->atom);it!=env->bindings.end()){control=it->second;continue;}
+        if(env)if(auto it=env->bindings.find(e->atom);it!=env->bindings.end()){record(TraceEvent::Kind::Lookup,e,e->atom);control=it->second;continue;}
         if(arguments.empty()){returned=Value{{},{},e->atom};continue;}
         if(!primitives().contains(e->atom)||arguments.size()!=primitives().at(e->atom))fail(e,"invalid primitive application");
         Continuation frame{Continuation::Kind::Primitive,control,{},{},{},e->atom};
@@ -164,6 +185,7 @@ struct Evaluator {
       }
       if(e->kind==Expr::Kind::Lambda) {
         if(arguments.empty()){returned=Value{{},control,{}};continue;}
+        record(TraceEvent::Kind::Bind,e,e->atom);
         auto next=std::make_shared<Environment>();if(env)next->bindings=env->bindings;
         next->bindings[e->atom]=std::move(arguments.back());arguments.pop_back();control={e->children[0],std::move(next)};continue;
       }
@@ -172,11 +194,12 @@ struct Evaluator {
         control={e->children[0],env};continue;
       }
       if(e->kind==Expr::Kind::Begin) {
+        record(TraceEvent::Kind::Sequence,e);
         if(e->children.size()>1){Continuation frame{Continuation::Kind::Begin,control,std::move(arguments)};frame.next=1;continuations.push_back(std::move(frame));arguments.clear();}
         control={e->children[0],env};continue;
       }
       if(!arguments.empty())fail(e,"attempt to apply a non-function");
-      returned=Value{e->integer,{},{}};
+      returned=Value{e->integer,{},{},record(TraceEvent::Kind::Integer,e,"const",e->integer)};
     }
   }
 };
@@ -196,8 +219,35 @@ Result<int> verify(const Program& p) {
   try{if(p.forms.empty())throw Error{Error::Code::InvalidArgument,"empty TraceLambda program"};std::set<const Expr*> visiting;for(auto& e:p.forms)check(e,{},visiting);return Result<int>::ok(0);}catch(const Error& e){return Result<int>::err(e);}
 }
 Result<int64_t> evaluate(const Program& p,size_t steps) {
-  auto v=verify(p);if(!v)return Result<int64_t>::err(v.error());
-  try{Evaluator evaluator{steps};Value result;for(auto& e:p.forms)result=evaluator.eval(e,{});if(!result.integer)throw Error{Error::Code::Unsupported,"TraceML program returns a function, not an integer"};return Result<int64_t>::ok(*result.integer);}catch(const Error& e){return Result<int64_t>::err(e);}
+  ExecutionOptions options;options.step_limit=steps;options.record_trace=false;
+  auto result=execute(p,options);if(!result)return Result<int64_t>::err(result.error());return Result<int64_t>::ok(result.value().value);
+}
+Result<ExecutionResult> execute(const Program& p,const ExecutionOptions& options) {
+  auto v=verify(p);if(!v)return Result<ExecutionResult>::err(v.error());
+  try {
+    Evaluator evaluator{options.step_limit,options};Value result;
+    for(auto& e:p.forms)result=evaluator.eval(e,{});
+    if(!result.integer)throw Error{Error::Code::Unsupported,"TraceML program returns a function, not an integer"};
+    evaluator.execution.value=*result.integer;evaluator.execution.result_value=result.trace_value;
+    evaluator.record(TraceEvent::Kind::Return,p.forms.back(),"return",{},result.trace_value?std::vector<uint32_t>{*result.trace_value}:std::vector<uint32_t>{});
+    return Result<ExecutionResult>::ok(std::move(evaluator.execution));
+  }catch(const Error& e){return Result<ExecutionResult>::err(e);}
+  catch(const std::exception& e){return Result<ExecutionResult>::err({Error::Code::Internal,std::string("TraceML observer: ")+e.what()});}
+  catch(...){return Result<ExecutionResult>::err({Error::Code::Internal,"TraceML observer exception"});}
+}
+std::string print_trace(const ExecutionResult& execution) {
+  std::string out;
+  for(auto& event:execution.trace) {
+    out+=std::to_string(event.step)+" "+std::to_string(event.line)+":"+std::to_string(event.column)+" ";
+    const char* names[]={"apply","bind","lookup","integer","primitive","branch","sequence","return"};
+    auto index=static_cast<size_t>(event.kind);out+=index<std::size(names)?names[index]:"invalid";
+    if(!event.operation.empty())out+=" "+event.operation;
+    if(event.value)out+=" %"+std::to_string(*event.value);
+    for(auto input:event.inputs)out+=" use %"+std::to_string(input);
+    if(event.result)out+=" = "+std::to_string(*event.result);
+    if(event.taken)out+=*event.taken?" taken":" not-taken";out+='\n';
+  }
+  return out;
 }
 Result<std::string> lower_checked(const Program& p) {
   auto v=verify(p);if(!v)return Result<std::string>::err(v.error());

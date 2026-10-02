@@ -3,6 +3,7 @@
  */
 
 #include "d.h"
+#include <stddef.h>
 
 /* tunables */
 #define DEFAULT_COMMIT_ACTIONS_INTERVAL 100
@@ -102,7 +103,7 @@ void PP(Parser *pp, PNode *p) {
   printf("\n");
 }
 
-#define D_ParseNode_to_PNode(_apn) ((PNode *)(D_PN(_apn, -(sizeof(PNode) - sizeof(D_ParseNode)))))
+#define D_ParseNode_to_PNode(_apn) ((PNode *)((char *)(_apn) - offsetof(PNode, parse_node)))
 #define PNode_to_D_ParseNode(_apn) ((D_ParseNode *)&((PNode *)(_apn))->parse_node)
 
 D_ParseNode *d_get_child(D_ParseNode *apn, int child) {

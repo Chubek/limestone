@@ -36,15 +36,21 @@ static void free_state(State *s) {
   FREE(s);
 }
 
-static uint32 state_hash_fn(State *s, hash_fns_t *fns) { return s->hash; }
-static int state_cmp_fn(State *a, State *b, hash_fns_t *fns) {
+static uint32 state_hash_fn(void *value, hash_fns_t *fns) {
+  State *s = value;
+  (void)fns;
+  return s->hash;
+}
+static int state_cmp_fn(void *left, void *right, hash_fns_t *fns) {
+  State *a = left, *b = right;
   uint j;
+  (void)fns;
   if (a->items.n != b->items.n) return 1;
   for (j = 0; j < a->items.n; j++)
     if (a->items.v[j] != b->items.v[j]) return 1;
   return 0;
 }
-static hash_fns_t state_hash_fns = {(hash_fn_t)state_hash_fn, (cmp_fn_t)state_cmp_fn, {0, 0}};
+static hash_fns_t state_hash_fns = {state_hash_fn, state_cmp_fn, {0, 0}};
 
 static State *maybe_add_state(Grammar *g, void *states_hash, State *s) {
   State *ss = set_add_fn(states_hash, s, &state_hash_fns);

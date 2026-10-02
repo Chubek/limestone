@@ -17,7 +17,7 @@ node Clobber { Unsigned position; PhysicalList registers; }
 node SpillSlot { Name name; Attribute* attributes; }
 node Function { Name name; Block* blocks; }
 node Block { Name name; Transfer* transfers; }
-sum Transfer = Move | ParallelCopy | Instruction | Successor;
+sum Transfer = Move | ParallelCopy | Instruction | Successor | Attribute;
 node Move { Operand destination @0; Operand source_operand @1; }
 node ParallelCopy { Move* moves; }
 node Successor { Name target; }

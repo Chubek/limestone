@@ -30,6 +30,9 @@ unittest {
     auto ret=MachineInstruction(Opcode.generic("ret"));ret.effects.control=ControlFlowKind.return_;
     block.append(ret);block.append(call);assert(!verify(f,error));block.instructions.length--;
     auto exit=f.newBlock("exit");f.connect(block,exit);f.connect(block,exit);assert(exit.predecessors.length==1);
+    assert(!verify(f,error)); // A return cannot declare an outgoing CFG edge.
+    block.instructions[$-1].effects.control=ControlFlowKind.unconditionalBranch;
+    block.instructions[$-1].operands=[Operand.block(exit.id)];
     assert(verify(f,error),error);exit.predecessors=null;assert(!verify(f,error));recomputePredecessors(f);assert(verify(f,error),error);
     f.blocks~=block;assert(!verify(f,error));
 }

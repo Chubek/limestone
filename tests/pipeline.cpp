@@ -19,11 +19,28 @@ int main(){return test_main([]{
   take(regtl::verify(allocated.allocation_problem,*allocated.allocation));take(schedrow::verify(allocated.selected,target.scheduling,allocated.scheduled));
   CHECK(allocated.machine_ir.find("ADD %10 %20")!=std::string::npos);
   CHECK(allocated.machine_ir==take(run_pipeline(graph,target,{true,true,true})).machine_ir);
+  unisel::Program reuse{{{1,"const",{},1,"i64"},{2,"add",{1,1},{},"i64"},{3,"const",{},2,"i64"},{4,"add",{3,3},{},"i64"}}, {4}};
+  reuse.dependencies={{2,3,schedrow::DepKind::Ordering}};
+  auto scarce=target;scarce.register_classes={{"G",{0}}};scarce.scheduling.issue_width=2;scarce.instructions["CONST"].latency=3;scarce.instructions["ADD"].resources.clear();scarce.instructions["ADD"].latency=0;
+  auto reused=take(run_pipeline(reuse,scarce,{false,true,true}));CHECK(reused.allocation->spilled.empty());CHECK(std::any_of(reused.selected.deps.begin(),reused.selected.deps.end(),[](auto& d){return d.kind==schedrow::DepKind::Output&&d.scheduler_only;}));take(schedrow::verify(reused.selected,scarce.scheduling,reused.scheduled));
+  auto finalized=take(regtl::allocated_dependencies(reused.selected,*reused.allocation));take(schedrow::verify(finalized,scarce.scheduling,reused.scheduled));
+  CHECK(std::find(reused.stages.begin(),reused.stages.end(),"allocated-schedule")!=reused.stages.end());
+  unisel::Program stores{{{0,"input",{},{},"i64",0,false},{90,"store",{0},{},"",0,true,true,false},{10,"store",{0},{},"",0,true,true,false}},{}};
+  stores.nodes[1].access=schedrow::MemoryAccess{false,true};stores.nodes[2].access=schedrow::MemoryAccess{false,true};
+  PipelineTarget memory_target;memory_target.name="memory";memory_target.patterns={{1,"store","store","STORE",{"i64"},1,{},true}};memory_target.instructions={{"STORE",{0}}};
+  limeburg::Rule store_rule{1,"value","store","value",{"value"},1,"STORE"};store_rule.supports_side_effects=true;
+  memory_target.burs_rules=limeburg::RuleSet{{store_rule},{{"value",0}}};
+  for(auto selector:{SelectionStrategy::Global,SelectionStrategy::Greedy,SelectionStrategy::BURS}){PipelineOptions memory_options;memory_options.selector=selector;auto kept=take(run_pipeline(stores,memory_target,memory_options));CHECK(kept.selected.instructions[0].id==90&&kept.scheduled[0].id==90&&kept.scheduled[1].id==10);}
   bool optimized=false;target.optimizer=[&](const unisel::Program& p){optimized=true;return Result<unisel::Program>::ok(p);};
   take(run_pipeline(graph,target));CHECK(optimized);optimized=false;take(run_pipeline(graph,target,{false,true,false}));CHECK(!optimized);
   auto missing=target;missing.instructions.erase("ADD");fails(run_pipeline(graph,missing),Error::Code::Unsupported);
+  fails(run_pipeline(graph,missing,{false,false,false}),Error::Code::Unsupported);
   auto unknown=target;unknown.instructions.at("ADD").latency.reset();fails(run_pipeline(graph,unknown),Error::Code::Unsupported);
   target.optimizer=[](const unisel::Program&){return Result<unisel::Program>::err({Error::Code::Conflict,"adapter rejected input"});};fails(run_pipeline(graph,target),Error::Code::Conflict);
+  target.optimizer=[](const unisel::Program&)->Result<unisel::Program>{throw Error{Error::Code::Interrupted,"host cancelled"};};auto cancelled=run_pipeline(graph,target);CHECK(!cancelled&&cancelled.error().code==Error::Code::Interrupted&&cancelled.error().message=="optimize: host cancelled");
+  target.optimizer={};target.grouping_adapter=[](const auto&,const auto&)->Result<std::vector<schedrow::InstructionGroup>>{throw std::runtime_error("host grouping failed");};auto failed_group=run_pipeline(graph,target);CHECK(!failed_group&&failed_group.error().code==Error::Code::Internal&&failed_group.error().message=="group: host grouping failed");
+  target.grouping_adapter={};target.allocation_adapter=[](const auto&,const auto&,auto)->Result<regtl::Program>{throw std::bad_alloc();};fails(run_pipeline(graph,target,{false,true,true}),Error::Code::ResourceLimit);
+  target.allocation_adapter={};target.backend=[](const Module&)->Result<BackendOutput>{throw Error{Error::Code::Unsupported,"backend unavailable"};};PipelineOptions encode;encode.encode=true;auto failed_backend=run_pipeline(graph,target,encode);CHECK(!failed_backend&&failed_backend.error().code==Error::Code::Unsupported&&failed_backend.error().message=="encode: backend unavailable");
   limestone_error error{};auto* module=limestone_compile_checked("(mul 6 7)",nullptr,&error);CHECK(module&&error.code==LIMESTONE_OK);
   CHECK(std::string(limestone_module_text(module)).find("#42")!=std::string::npos);limestone_module_destroy(module);
   CHECK(!limestone_compile_checked(nullptr,nullptr,&error)&&error.code==LIMESTONE_INVALID_ARGUMENT);

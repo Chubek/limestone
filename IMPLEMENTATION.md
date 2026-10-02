@@ -1,54 +1,121 @@
 # Limestone implementation status
 
-This checkout contains Limestone's C/C++ foundation and subsystem implementations,
-the D MachineIR package, the Infobank, and the supplied third-party integration
-dependencies. Subsystem implementations cover focused vertical slices; full
-architecture and IL-adapter contracts remain defined by their local `AGENTS.md`.
+The framework has connected C/C++ subsystems, standalone textual IL adapters,
+opaque C APIs, a D MachineIR package, and a relocatable installation. Target
+properties come from explicit metadata or host adapters. The component
+`AGENTS.md` files describe the architecture, including facilities that require
+further adapters; they are not a declaration that every listed feature is
+implemented.
 
-Implemented locally:
+## Implemented
 
-- Metacode ISA ingestion and architecture/register/operation normalization.
-- Schedrow dependency-aware deterministic list scheduler.
-- RegTL virtual/physical register model, linear-scan allocator, and verifier.
-- Limeburg typed selection tree model and bottom-up dynamic-programming BURS selector.
-- Unisel program/pattern/candidate and constraint models, Satie-backed selection,
-  and an explicit greedy development selector.
-- Bin2Bin generic decode/disassembly/translation-cache infrastructure with explicit unsupported cases.
-- Tunah Equinox-NG-backed bounded saturation, source-aware transactional rule-file
-  compilation through EkippX/SExprTk/DSLtk, host-analysis guards, structured term
-  ingress/egress, configurable checked extraction costs, and optional traces.
-- Tunah's shared instruction vocabulary and 13 tuner files (239 rules), with
-  width/overflow, memory-forwarding, and scalar/vector-shape regressions. See
-  `tunah/README.md` for semantics and adapter requirements.
-- TraceML parsing, closed integer evaluation, and portable MachineIR-facing
-  graph lowering.
-- Exolayer stable C ABI for native symbol registration/calls.
-- VMWeave deterministic Lua VM DSL and C skeleton generation.
-- Top-level Limestone C/C++ orchestration API and CLI, including standalone
-  Tunah term optimization with explicit rule files, costs, limits, and traces.
-- CMake build, focused subsystem tests, tuner corpus checks, and CLI integration.
-- All ten DParser grammars under `parsers/`, matching `.absyn` schemas, and the
-  Perl `scripts/syngen.pl` AST/visitor generator. `limestone_parsers` exposes
-  source-located owning C++ syntax trees, mutable/const visitors, and typed
-  parsing entry points. See `parsers/README.md` for formats and generation.
+| Component | Available behavior |
+| --- | --- |
+| Metacode | Source-located ISA ingestion; registers/classes/aliases, operation/encoding normalization, shared declarative operand predicates, unknown-metadata preservation, deterministic JSON |
+| Unisel | Semantic UMD load/print, bounded source-located include graphs, explicit Infobank selection patterns, typed/repeated-binding/register-class and declarative operand legality, owning C/Python candidate/constraint/selection inspection, Satie global selection, greedy selection, CFG/effect-preserving Scheduler IR emission |
+| Limeburg | Deterministic typed BURS dynamic programming, stable-ID state tables and rejection traces via C/C++/Python/CLI, bounded textual includes, nested patterns, immediate/identity predicates, rule priorities and provenance, effect legality, UMD adapter, tree-only and shared-value-preserving graph policies |
+| Schedrow | Register/physical/memory/control hazards, SSA and architectural result latency domains, alternative resources, fractional quantities, occupancy/offsets, throughput metadata, priorities/critical paths, joint issue-slot/resource matching, ordered/adjacent/atomic/same-cycle/bundle/fusion/pair groups, list/CFG/modulo scheduling, schedule and sequential-order verification |
+| RegTL | CFG liveness, precise interference and lifetime segments, architectural-state liveness, classes, aliases, fixed/allowed/forbidden registers, ties, early definitions, clobbers, linear/greedy/coloring/constraint allocation, parallel-move resolution, private spill frames and scratch transfers, post-allocation scheduling adapter |
+| Tunah | Equinox-NG-backed bounded saturation; transactional EkippX/SExprTk/DSLtk rule loading; host predicates, checked costs and traces; owning C/Python sessions/results, typed target attachments and binary/runtime transforms; typed bidirectional Unisel graph reconstruction/remapping with effect/CFG/live-out preservation; validated lifted-semantic Bin2Bin adapter with owning rule snapshots and deterministic cache identity |
+| Bin2Bin | Fixed8 and explicit masked codecs, signed/register/PC-relative fields, status/control/trap preservation, semantic operand matching/lifting/transforms, CFG analysis, relocated same/cross-ISA translation, monotonic branch relaxation, complete selected operand bindings, bounded owning ELF64 object ingestion/emission, metadata-driven symbol/bitfield relocation and addressed linking via C/C++/Python/CLI, version-sensitive memory/LMDB caches, bounded heat-tracking C/C++ runtime with owning installers and invalidation, Python observation handles |
+| MachineIR | Architecture-neutral D instructions/operands/effects/CFGs; dominance, liveness, use/def and serialization; validated versioned C++/D region/CFG/spill/group exchange |
+| TraceML | Source-located S-expression frontend, lexical call-by-name MetaKrivine execution, checked integer primitives, observers/events, budgets/cancellation, guard-preserving trace-to-graph lowering, explicit-target C/C++/Python/CLI compilation and a callable native constant/return integration |
+| Exolayer | Opaque C contexts, typed callbacks, scalar layouts, extension loading/lifetimes, fixed/variadic scalar native signatures, explicit calling conventions, owning native-library bindings through an isolated libffi adapter |
+| VMWeave | Validated deterministic Lua VM DSL, self-contained C state/handlers, optional switch dispatch and before/after hooks |
+| Orchestration | C/C++ target/program/configuration APIs, optimizer/allocation/backend adapters, selected fixed-operand/ABI requirements merged into allocation and independently checked in encoding, inspectable stages, final spill/register/frame inspection, MachineIR handoff, byte/relocation/ELF output and CLI |
 
-The required Satie, Equinox-NG, MetaTk, ExolangTk, and DParser integrations are
-supplied in this checkout and consumed through repository CMake targets.
-Bin2Bin's optional persistent cache additionally requires the configured LMDB
-headers/library.
+Textual Unisel, Limeburg, Schedrow, and RegTL loaders have independent targets and canonical
+serializers. `limestone/il.h` exposes document/result handles that can be used
+without the top-level pipeline. All ten grammars and AST schemas are generated
+through DParser and `scripts/syngen.pl`; generated tables and parser headers are
+build/install artifacts. Optional SWIG Python bindings consume the C ABI.
 
-The D MachineIR package remains independently buildable with D tooling. The
-current environment provides that tooling; its native suite runs as the
-`machine-ir` CTest test.
+The Tunah instruction corpus has 13 tuner files and 239 rules, with explicit
+width, overflow, memory-forwarding, and vector-shape preconditions. Detailed
+rule semantics and optimizer measurements remain in `tunah/README.md` and
+`tunah/BENCHMARKS.md`.
 
-Remaining Tunah boundaries: concrete bi-directional IL adapters and their type,
-effect, and target-legality analyses; complete preprocessing/source-map support;
-preemptible time budgets inside vendor operations; and full e-node derivation
-provenance. Generic rule loading rejects unavailable host predicates explicitly.
+## Integration contracts
 
-Validation: CMake configuration/build and all 17 CTest tests pass, including
-parser/AST/visitor regressions, schema-generator checks, and the D MachineIR
-suite. The parser runtime, all generated tables/ASTs, and the parser/corpus tests
-also pass AddressSanitizer, UndefinedBehaviorSanitizer, and leak detection.
-The earlier Tunah round passed focused sanitizer tests; its comparative
-optimizer timings and output costs are recorded in `tunah/BENCHMARKS.md`.
+- Source value graphs are acyclic SSA; CFGs may contain cycles. Values crossing
+  blocks must dominate their uses. Phi elimination is an input adapter.
+- Blocks are laid out in declaration order with entry first. A conditional
+  branch's second target is the next block; the direct encoding binding uses
+  target index zero. Scheduling cycles are block-local.
+- Selection preserves observable source-effect order before fusion. Memory and
+  control contracts remain separate from costs, resources, and allocation.
+- Allocation uses the selected emission order. Final scheduling includes register
+  reuse/alias hazards. Original spill decisions remain in `Module::allocation`;
+  final transfers, frame, assignment, and schedule are in `Module::materialized`.
+- Spill transfers use an explicit private address space and target load/store
+  models. Live-ins, outputs, and explicit live-outs are nonspillable unless a
+  boundary-transfer adapter is supplied.
+- MachineIR exchange version 1 supports simple regions; version 2 carries CFG,
+  control flow, spill frames, and architectural-result latency. Version 3 adds
+  groups, including adjacency, equal cycles and slots. Both sides check group
+  constraints, SSA availability, dependency/order/latency, CFG issue layout and malformed fields.
+  Returned D programs admit immediate and provenance edits; structural/effect
+  changes require reconstruction adapters. Machine capacities remain target data.
+- Native invocation uses scalar `EXL_I64`, `EXL_F64`, and `EXL_PTR` arguments,
+  scalar/void results, and at most 32 arguments. Variadic registrations describe
+  an exact already-promoted argument shape and a fixed prefix. Extensions use the distinct
+  host callback ABI. Runtime installers retain executable ownership through calls.
+- ELF64 object identity and relocation encodings require explicit
+  `tooling.object_file` metadata. Object emission retains all named fixups;
+  linking resolves local/global/weak symbols at an explicit installation base,
+  checks ranges/overlaps/scales and returns immutable owning image bytes.
+
+## Remaining adapters and unsupported contracts
+
+These are concrete implementation boundaries, rather than silently approximated
+behavior:
+
+- Production Infobank entries need complete legal selection patterns, timing,
+  operand/ABI lowering, and encoder contracts before they can generate executable
+  programs. Ingestion of 23 ISAs is covered; universal production code generation
+  for those ISAs is not established.
+- Native variable-length codecs beyond the masked model, ELF32/REL, archives,
+  dynamic linking, COMDAT, TLS/GOT/PLT construction and complex relocations,
+  generalized cross-ISA state/ABI transformations, and higher-level/LLM decompiler
+  plugins need backend adapters. ELF64 ET_REL/RELA and explicit scalar relocation
+  fields are implemented; see `bin2bin/OBJECTS.md`.
+- Executable TraceML guards need a backend deoptimization and continuation
+  contract. General closure/environment code generation needs runtime lowering.
+- Target-specific predicates beyond the closed operand-legality contract, string graph arguments, and unsupported graph
+  properties are rejected. Richer Limeburg memory contracts require adapters.
+  Cross-block motion, overlapping non-ordered scheduling groups,
+  multi-slot instructions and ranged/operand-to-operand timing require adapters.
+- RegTL bank/tuple/subregister-lane/rematerialization constraints need target
+  adapters. Aliasing currently represents pairwise overlapping storage. Coloring
+  and constraint allocation share a bounded grouped search; it is not a PBQP
+  implementation. Spill boundary/control transfers and target-specific implicit,
+  tied, or early-clobber transfer instructions require adapters.
+- Tunah region-level binary and additional stage IL adapters, complete preprocessing source maps,
+  preemption within vendor operations, and full e-node derivation provenance
+  remain open. Time/cancellation checks are cooperative.
+- Native aggregate/vector calls and foreign exception propagation need
+  FFI adapters. The supplied FFItk native-call function returns `FFI_ENOSYS`;
+  the isolated libffi adapter implements the supported native subset.
+
+## Validation coverage
+
+The standard Linux x86-64 configuration registers 33 CTest tests when Lua and D tools are
+available; enabling Python bindings adds two integration tests. Coverage includes
+positive/negative parsing, solver legality, CFG/issue-vector scheduling verification, all allocators,
+native/callback ownership, mixed integer/floating/pointer variadic stack calls,
+bounded filesystem/virtual include graphs and provenance, executable generated VM code, the tuner corpus, C99
+and C++ consumers, exported C ABI symbols, standalone owning optimizer handles,
+callback snapshot lifetimes, optimized binary/runtime C APIs, native Python proof
+callbacks, owning object/link APIs and installed standalone object consumers,
+and relocation of the installed CMake package.
+
+Backend tests independently execute encoded branch, fused-memory, shared-value,
+and spill/reload programs. Object tests link and execute two compiler-produced
+native ELF objects (result 42); reemission is also linked and executed by the
+system compiler/linker. The native TraceML slice exercises all three selectors
+and four allocators, executes signed-32-bit boundary/negative results, and links
+an emitted function with a C consumer. Exchange tests run C++ -> D -> C++, re-encode edited
+CFG/spill programs, and execute results 43 and 44. The D suite runs four unittest
+modules and loads all 23 Infobank ISAs. Validation configurations include native
+FFI enabled/disabled and C++ AddressSanitizer/UndefinedBehaviorSanitizer/leak
+detection. See the build commands in `README.md` to reproduce these checks.

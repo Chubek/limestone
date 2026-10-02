@@ -6,6 +6,12 @@
 #include <set>
 
 namespace limestone::unisel {
+PatternTree pattern_tree(const Pattern& pattern) {
+  if(pattern.tree)return *pattern.tree;
+  PatternTree tree;tree.op=pattern.root_op;
+  for(auto& type:pattern.operands){PatternTree input;if(type!="v")input.type=type;tree.inputs.push_back(std::move(input));}
+  return tree;
+}
 Result<int> validate(const Program& p,const std::vector<Pattern>& patterns) {
   std::map<NodeId,const Node*> nodes;
   for(auto& n:p.nodes)if(n.op.empty()||!nodes.emplace(n.id,&n).second)return Result<int>::err({Error::Code::InvalidArgument,"empty operation or duplicate source node"});
@@ -13,10 +19,11 @@ Result<int> validate(const Program& p,const std::vector<Pattern>& patterns) {
   for(auto& n:p.nodes) {
     indegree[n.id]=n.inputs.size();
     for(auto id:n.inputs) {
-      if(!nodes.contains(id))return Result<int>::err({Error::Code::InvalidArgument,"unknown input to node "+std::to_string(n.id)});
+       if(!nodes.contains(id))return Result<int>::err({Error::Code::InvalidArgument,"unknown input to node "+std::to_string(n.id)});
+       if(!nodes.at(id)->produces_value)return Result<int>::err({Error::Code::InvalidArgument,"input does not produce a value"});
       out[id].push_back(n.id);
     }
-    if(!n.required&&(!n.inputs.empty()||n.side_effect))return Result<int>::err({Error::Code::InvalidArgument,"external values must be effect-free leaves"});
+    if(!n.required&&(!n.inputs.empty()||n.side_effect||n.access||n.call||n.terminator||n.may_trap||n.control!=schedrow::ControlFlow::None||!n.block_targets.empty()))return Result<int>::err({Error::Code::InvalidArgument,"external values must be effect-free leaves"});
   }
   for(auto& d:p.dependencies) {
     if(!nodes.contains(d.producer)||!nodes.contains(d.consumer))return Result<int>::err({Error::Code::InvalidArgument,"unknown semantic dependency endpoint"});
@@ -27,7 +34,8 @@ Result<int> validate(const Program& p,const std::vector<Pattern>& patterns) {
   size_t visited=0;
   while(!ready.empty()){auto id=*ready.begin();ready.erase(ready.begin());++visited;for(auto child:out[id])if(--indegree[child]==0)ready.insert(child);}
   if(visited!=nodes.size())return Result<int>::err({Error::Code::Conflict,"cyclic source dependencies"});
-  for(auto id:p.outputs)if(!nodes.contains(id))return Result<int>::err({Error::Code::InvalidArgument,"unknown program output"});
+  auto cfg=validate_cfg(p);if(!cfg)return cfg;
+   for(auto id:p.outputs)if(!nodes.contains(id)||!nodes.at(id)->produces_value)return Result<int>::err({Error::Code::InvalidArgument,"unknown or non-value program output"});
   std::unordered_set<PatternId> ids;
   std::function<bool(const PatternTree&)> valid_tree=[&](const PatternTree& tree){
     if(tree.immediate&&tree.immediate->first>tree.immediate->second)return false;
@@ -37,10 +45,14 @@ Result<int> validate(const Program& p,const std::vector<Pattern>& patterns) {
   for(auto& pat:patterns) {
     if(!ids.insert(pat.id).second||pat.cost<0||pat.instruction.empty()||pat.root_op.empty())return Result<int>::err({Error::Code::InvalidArgument,"invalid instruction pattern"});
     if(pat.tree&&(!valid_tree(*pat.tree)||pat.tree->op!=pat.root_op))return Result<int>::err({Error::Code::InvalidArgument,"invalid structured pattern"});
+    std::vector<std::string> bindings;auto tree=pattern_tree(pat);std::vector<const PatternTree*> work{&tree};
+    while(!work.empty()){auto node=work.back();work.pop_back();if(!node->binding.empty())bindings.push_back(node->binding);for(auto& child:node->inputs)work.push_back(&child);}
+    auto legal=metacode::validate_operand_constraints(pat.constraints,bindings);if(!legal)return Result<int>::err({legal.error().code,(pat.origin.empty()?"":pat.origin+": ")+"pattern "+pat.name+": "+legal.error().message});
   }
   return Result<int>::ok(0);
 }
-std::vector<Candidate> match(const Program& p,const std::vector<Pattern>& patterns) {
+std::vector<Candidate> match(const Program& input,const std::vector<Pattern>& patterns) {
+  auto prepared=prepare(input);if(!prepared)return {};const auto& p=prepared.value();
   if(!validate(p,patterns))return {};
   std::map<NodeId,const Node*> nodes;std::map<NodeId,std::vector<NodeId>> users;
   for(auto& n:p.nodes){nodes[n.id]=&n;for(auto id:n.inputs)users[id].push_back(n.id);}
@@ -50,8 +62,9 @@ std::vector<Candidate> match(const Program& p,const std::vector<Pattern>& patter
     std::map<std::string,NodeId> bindings;bool effects=false;
     std::function<bool(NodeId,const PatternTree&)> visit=[&](NodeId id,const PatternTree& tree) {
        const auto& node=*nodes.at(id);
-      if(node.block!=n.block)return false;
-      if(!tree.type.empty()&&tree.type!=node.type)return false;
+       if(!tree.op.empty()&&node.block!=n.block)return false;
+       if(!tree.type.empty()&&tree.type!=node.type)return false;
+       if(!tree.register_class.empty()&&tree.register_class!=node.register_class)return false;
       if(tree.immediate&&(!node.constant||*node.constant<tree.immediate->first||*node.constant>tree.immediate->second))return false;
       if(!tree.binding.empty()) {
         auto [it,added]=bindings.emplace(tree.binding,id);if(!added&&it->second!=id)return false;
@@ -59,19 +72,22 @@ std::vector<Candidate> match(const Program& p,const std::vector<Pattern>& patter
        if(tree.op.empty()){if(!node.produces_value)return false;c.inputs.push_back(id);return true;}
       if(tree.op!=node.op||tree.inputs.size()!=node.inputs.size()||!node.required)return false;
       if(std::find(c.covered.begin(),c.covered.end(),id)!=c.covered.end())return false;
-      c.covered.push_back(id);effects|=node.side_effect;
+        c.covered.push_back(id);effects|=node.side_effect||bool(node.access)||node.call||node.terminator||node.may_trap||node.control!=schedrow::ControlFlow::None;
       for(size_t i=0;i<node.inputs.size();++i)if(!visit(node.inputs[i],tree.inputs[i]))return false;
       return true;
     };
-    PatternTree tree;
-    if(pat.tree)tree=*pat.tree;
-    else { tree.op=pat.root_op;for(auto& operand:pat.operands)tree.inputs.push_back(PatternTree{}); }
+    auto tree=pattern_tree(pat);
     if(!visit(n.id,tree)||(effects&&!pat.supports_side_effects))continue;
-    std::sort(c.covered.begin(),c.covered.end());
+    if(!std::all_of(pat.constraints.begin(),pat.constraints.end(),[&](auto& constraint){auto& operand=*nodes.at(bindings.at(constraint.operand));std::optional<metacode::BoundOperand> other;if(metacode::relational(constraint.predicate)){auto& node=*nodes.at(bindings.at(constraint.other));other=metacode::BoundOperand{node.id,node.constant};}return metacode::satisfies(constraint,{operand.id,operand.constant},other);}))continue;
+    for(auto& constraint:pat.constraints){c.reason+="; proved "+std::string(metacode::predicate_name(constraint.predicate))+"("+constraint.operand;if(!constraint.other.empty())c.reason+=","+constraint.other;if(constraint.value)c.reason+=","+std::to_string(*constraint.value);c.reason+=")";}
+     std::sort(c.covered.begin(),c.covered.end());
+     if(std::any_of(c.inputs.begin(),c.inputs.end(),[&](auto id){return std::binary_search(c.covered.begin(),c.covered.end(),id);}))continue;
     bool escapes=false;
     for(auto id:c.covered)if(id!=n.id) {
       for(auto user:users[id])if(!std::binary_search(c.covered.begin(),c.covered.end(),user))escapes=true;
       if(std::find(p.outputs.begin(),p.outputs.end(),id)!=p.outputs.end())escapes=true;
+      for(auto& b:p.blocks)if(std::find(b.live_out.begin(),b.live_out.end(),id)!=b.live_out.end())escapes=true;
+      if(nodes.at(id)->control!=schedrow::ControlFlow::None)escapes=true;
       // Preserve effect placement: explicit ordering may not be hidden by fusion.
       for(auto& d:p.dependencies)if(d.producer==id||d.consumer==id)escapes=true;
     }
@@ -81,7 +97,8 @@ std::vector<Candidate> match(const Program& p,const std::vector<Pattern>& patter
   std::sort(candidates.begin(),candidates.end(),[](auto& a,auto& b){return std::tie(a.root,a.cost,a.pattern)<std::tie(b.root,b.cost,b.pattern);});
   return candidates;
 }
-Result<ConstraintModel> build_model(const Program& p,const std::vector<Pattern>& patterns) {
+Result<ConstraintModel> build_model(const Program& input,const std::vector<Pattern>& patterns) {
+  auto prepared=prepare(input);if(!prepared)return Result<ConstraintModel>::err(prepared.error());const auto& p=prepared.value();
   auto valid=validate(p,patterns);if(!valid)return Result<ConstraintModel>::err(valid.error());
   ConstraintModel m{match(p,patterns),{}};
   if(m.candidates.size()>static_cast<size_t>(std::numeric_limits<int32_t>::max()/128))return Result<ConstraintModel>::err({Error::Code::ResourceLimit,"too many candidates"});
@@ -151,7 +168,8 @@ Result<Selection> solve(const Program& p,const std::vector<Pattern>& patterns) {
   auto emitted=emit_scheduler(p,patterns,s);if(!emitted)return Result<Selection>::err(emitted.error());
   return Result<Selection>::ok(std::move(s));
 }
-Result<Selection> solve_greedy(const Program& p,const std::vector<Pattern>& patterns) {
+Result<Selection> solve_greedy(const Program& input,const std::vector<Pattern>& patterns) {
+  auto prepared=prepare(input);if(!prepared)return Result<Selection>::err(prepared.error());const auto& p=prepared.value();
   auto valid=validate(p,patterns);if(!valid)return Result<Selection>::err(valid.error());
   auto candidates=match(p,patterns);std::sort(candidates.begin(),candidates.end(),[](auto& a,auto& b){return std::tie(a.cost,a.pattern,a.root)<std::tie(b.cost,b.pattern,b.root);});
   Selection s;std::unordered_set<NodeId> covered;int64_t cost=0;
@@ -163,7 +181,8 @@ Result<Selection> solve_greedy(const Program& p,const std::vector<Pattern>& patt
   s.cost=static_cast<int>(cost);auto emitted=emit_scheduler(p,patterns,s);if(!emitted)return Result<Selection>::err(emitted.error());
   return Result<Selection>::ok(std::move(s));
 }
-Result<schedrow::Region> emit_scheduler(const Program& p,const std::vector<Pattern>& patterns,const Selection& selection) {
+Result<schedrow::Region> emit_scheduler(const Program& input,const std::vector<Pattern>& patterns,const Selection& selection) {
+  auto prepared=prepare(input);if(!prepared)return Result<schedrow::Region>::err(prepared.error());const auto& p=prepared.value();
   auto valid=validate(p,patterns);if(!valid)return Result<schedrow::Region>::err(valid.error());
   auto candidates=match(p,patterns);std::map<NodeId,NodeId> owner;std::map<PatternId,const Pattern*> pats;
   for(auto& pat:patterns)pats[pat.id]=&pat;
@@ -176,22 +195,39 @@ Result<schedrow::Region> emit_scheduler(const Program& p,const std::vector<Patte
   }
   for(auto& n:p.nodes)if(n.required&&!owner.contains(n.id))return Result<schedrow::Region>::err({Error::Code::Conflict,"uncovered source operation"});
   if(cost!=selection.cost)return Result<schedrow::Region>::err({Error::Code::Conflict,"selection cost mismatch"});
-  schedrow::Region r{"unisel"};std::set<std::tuple<NodeId,NodeId,schedrow::DepKind,uint32_t>> edges;
+  schedrow::Region r{"unisel"};r.blocks=p.blocks;r.entry=p.entry;std::set<std::tuple<NodeId,NodeId,schedrow::DepKind,uint32_t,bool>> edges;
+  std::map<NodeId,const Node*> nodes;for(auto& n:p.nodes)nodes[n.id]=&n;
+  std::map<NodeId,size_t> position;for(size_t k=0;k<p.nodes.size();++k)position[p.nodes[k].id]=k;
   auto selected=selection.selected;
   std::sort(selected.begin(),selected.end(),[](auto& a,auto& b){return a.root<b.root;});
   for(auto& c:selected) {
     schedrow::Instruction i{};i.id=c.root;i.opcode=pats.at(c.pattern)->instruction;i.defs=c.outputs;i.uses=c.inputs;
-     i.origin="pattern "+std::to_string(c.pattern)+", root "+std::to_string(c.root);
+    i.block=nodes.at(c.root)->block;i.block_targets=nodes.at(c.root)->block_targets;i.control=nodes.at(c.root)->control;
+    for(auto value:c.inputs)if(!nodes.at(value)->register_class.empty())i.register_classes[value]=nodes.at(value)->register_class;
+    for(auto value:c.outputs)if(!nodes.at(value)->register_class.empty())i.register_classes[value]=nodes.at(value)->register_class;
+      i.origin="pattern "+std::to_string(c.pattern)+", root "+std::to_string(c.root);
+      if(!pats.at(c.pattern)->origin.empty())i.origin+="; "+pats.at(c.pattern)->origin;
      for(auto id:c.covered) {
        const auto& node=*std::find_if(p.nodes.begin(),p.nodes.end(),[&](auto& n){return n.id==id;});
        if(node.constant)i.immediates.emplace_back(id,*node.constant);
-       if(node.side_effect)i.speculative=false;
+         if(node.side_effect||node.access||node.call||node.terminator||node.may_trap||node.control!=schedrow::ControlFlow::None)i.speculative=false;
+        if(node.access) {
+          if(i.access)return Result<schedrow::Region>::err({Error::Code::Unsupported,"fusing multiple memory accesses requires a target effect adapter"});
+          i.access=node.access;i.memory=true;
+        }
+          i.call|=node.call;i.terminator|=node.terminator;i.may_trap|=node.may_trap;
+          i.call|=node.control==schedrow::ControlFlow::Call;i.terminator|=node.control!=schedrow::ControlFlow::None&&node.control!=schedrow::ControlFlow::Call;
+         i.barrier|=node.side_effect&&!node.access&&!node.call&&!node.terminator;
+        if(!node.origin.empty())i.origin+="; "+node.origin;
      }
     r.instructions.push_back(std::move(i));
-    for(auto input:c.inputs)if(owner.contains(input)&&owner.at(input)!=c.root)edges.emplace(owner.at(input),c.root,schedrow::DepKind::True,0);
+    for(auto input:c.inputs)if(owner.contains(input)&&owner.at(input)!=c.root)edges.emplace(owner.at(input),c.root,schedrow::DepKind::True,0,false);
   }
-  for(auto& d:p.dependencies)if(owner.contains(d.producer)&&owner.contains(d.consumer)&&owner.at(d.producer)!=owner.at(d.consumer))edges.emplace(owner.at(d.producer),owner.at(d.consumer),d.kind,d.latency);
-  for(auto [a,b,kind,latency]:edges)r.deps.push_back({a,b,kind,latency});
+  for(auto& d:p.dependencies) {
+    if(!owner.contains(d.producer)||!owner.contains(d.consumer))return Result<schedrow::Region>::err({Error::Code::Unsupported,"semantic dependency involves an external value"});
+    if(owner.at(d.producer)!=owner.at(d.consumer))edges.emplace(owner.at(d.producer),owner.at(d.consumer),d.kind,d.latency,d.scheduler_only);
+  }
+  for(auto [a,b,kind,latency,scheduling]:edges)r.deps.push_back({a,b,kind,latency,0,scheduling});
   // Detect dependency cycles before exposing a selection to a scheduler.
   std::map<NodeId,size_t> indegree;std::map<NodeId,std::vector<NodeId>> out;
   for(auto& i:r.instructions)indegree[i.id]=0;
@@ -199,7 +235,7 @@ Result<schedrow::Region> emit_scheduler(const Program& p,const std::vector<Patte
   std::set<NodeId> ready;for(auto [id,n]:indegree)if(!n)ready.insert(id);
   std::vector<schedrow::Instruction> ordered;
   while(!ready.empty()){
-    auto id=*ready.begin();ready.erase(ready.begin());
+    auto chosen=std::min_element(ready.begin(),ready.end(),[&](auto a,auto b){return std::tie(position[a],a)<std::tie(position[b],b);});auto id=*chosen;ready.erase(chosen);
     ordered.push_back(*std::find_if(r.instructions.begin(),r.instructions.end(),[&](auto& i){return i.id==id;}));
     for(auto child:out[id])if(--indegree[child]==0)ready.insert(child);
   }

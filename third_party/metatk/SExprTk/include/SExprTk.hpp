@@ -108,21 +108,6 @@ inline std::string_view to_string(NodeKind k) {
     return "unknown";
 }
 
-struct List {
-    std::vector<Cell> cells {};
-
-    void push(Cell c);
-    void pop();
-    bool empty() const { return cells.empty(); }
-    std::size_t size() const { return cells.size(); }
-    Cell& front() { return cells.front(); }
-    const Cell& front() const { return cells.front(); }
-    Cell& back() { return cells.back(); }
-    const Cell& back() const { return cells.back(); }
-    Cell& operator[](std::size_t i) { return cells[i]; }
-    const Cell& operator[](std::size_t i) const { return cells[i]; }
-};
-
 struct Atom {
     using ListPtr = std::shared_ptr<List>;
     using Value = std::variant<std::nullptr_t, bool, std::int64_t, double, std::string, ListPtr>;
@@ -192,9 +177,27 @@ struct Cell {
     bool is_pair() const { return !tail.empty() && !head.is_list(); }
     bool is_list_cell() const { return head.is_list(); }
 
-    const Cell& car() const { return head.is_list() ? std::get<Atom::ListPtr>(head.value)->cells.front() : *this; }
+    const Cell& car() const;
     std::vector<Cell> cdr() const { return tail; }
 };
+
+// Vector member operations require a complete Cell in conforming C++20 builds.
+struct List {
+    std::vector<Cell> cells {};
+
+    void push(Cell c);
+    void pop();
+    bool empty() const { return cells.empty(); }
+    std::size_t size() const { return cells.size(); }
+    Cell& front() { return cells.front(); }
+    const Cell& front() const { return cells.front(); }
+    Cell& back() { return cells.back(); }
+    const Cell& back() const { return cells.back(); }
+    Cell& operator[](std::size_t i) { return cells[i]; }
+    const Cell& operator[](std::size_t i) const { return cells[i]; }
+};
+
+inline const Cell& Cell::car() const { return head.is_list() ? std::get<Atom::ListPtr>(head.value)->cells.front() : *this; }
 
 inline void List::push(Cell c) { cells.push_back(std::move(c)); }
 inline void List::pop() { if (!cells.empty()) cells.pop_back(); }

@@ -1,11 +1,11 @@
 modules:
   - name: Exolayer::callbacks
     header: ../../exolayer/exolayer.h
-    brief: Host callback registration and versioned native extension loading.
+    brief: Typed host callbacks, scalar and aggregate native calls, layouts, and native library ownership.
     stability: experimental
-    depends_on: [ExtensionTk::dynload]
+    depends_on: [ExtensionTk::dynload, InteropTk::ctypes, InteropTk::layout, InteropTk::callconv, FFItk::cif]
     provides:
-      types: [exl_context_t, exl_library_t, exl_kind_t, exl_value_t, exl_native_fn, exl_extension_symbol_t, exl_extension_descriptor_t]
-      functions: [exl_context_create, exl_context_destroy, exl_register, exl_call, exl_last_error, exl_library_open, exl_library_close]
-      macros: [EXL_DEF, EXL_EXTENSION_ABI_VERSION, EXL_EXOLAYER_IMPLEMENTATION]
-      constants: [EXL_VOID, EXL_I64, EXL_F64, EXL_PTR]
+      types: [exl_context_t, exl_library_t, exl_kind_t, exl_value_t, exl_signature_t, exl_native_fn, exl_native_address_t, exl_callconv_t, exl_extension_symbol_t, exl_extension_descriptor_t, exl_native_type_t, exl_native_kind_t, exl_data_signature_t, exl_data_argument_t]
+      functions: [exl_context_create, exl_context_destroy, exl_register, exl_register_typed, exl_register_native, exl_register_native_variadic, exl_native_available, exl_kind_layout, exl_call, exl_last_error, exl_library_open, exl_library_open_native, exl_library_bind, exl_library_bind_variadic, exl_library_close, exl_native_type_scalar, exl_native_type_struct, exl_native_type_array, exl_native_type_destroy, exl_native_type_layout, exl_native_type_offset, exl_register_native_data, exl_library_bind_data, exl_call_data]
+      macros: [EXL_DEF, EXL_EXTENSION_ABI_VERSION, EXL_EXOLAYER_IMPLEMENTATION, EXL_NATIVE_MAX_ARGS, EXL_NATIVE_MAX_TYPE_NODES, EXL_NATIVE_MAX_TYPE_DEPTH, EXL_NATIVE_MAX_TYPE_BYTES]
+      constants: [EXL_VOID, EXL_I64, EXL_F64, EXL_PTR, EXL_CC_HOST, EXL_CC_SYSV64, EXL_CC_WIN64, EXL_CC_CDECL, EXL_CC_STDCALL, EXL_CC_FASTCALL, EXL_CC_AAPCS64, EXL_CC_AAPCS, EXL_NATIVE_VOID, EXL_NATIVE_I8, EXL_NATIVE_U8, EXL_NATIVE_I16, EXL_NATIVE_U16, EXL_NATIVE_I32, EXL_NATIVE_U32, EXL_NATIVE_I64, EXL_NATIVE_U64, EXL_NATIVE_F32, EXL_NATIVE_F64, EXL_NATIVE_PTR]

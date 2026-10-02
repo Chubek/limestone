@@ -315,19 +315,15 @@ ITK_DEF itk_bool itk_char_is_signed(void)
 #endif
 }
 
-/** Alignment-of idiom for C99: the offset a compiler would give the member
- *  when packed after a char is the type's natural alignment. */
-#define itk_alignof_(ct) \
-    ((size_t) & (((struct { char itk_pad_; ct itk_m_; } *)0)->itk_m_))
-
 /** Primitive size/align via the one true table: the compiler itself. */
 static void itk_prim_layout_(itk_type_kind kind, size_t *sz, size_t *al)
 {
 #define ITK_CASE(k, ct)                                                     \
-    case ITK_KIND_##k:                                                      \
+    case ITK_KIND_##k: {                                                    \
+        struct itk_primitive_layout_ { char pad; ct member; };              \
         *sz = sizeof(ct);                                                   \
-        *al = itk_alignof_(ct);                                             \
-        break
+        *al = offsetof(struct itk_primitive_layout_, member);              \
+        break; }
     switch (kind) {
     ITK_CASE(BOOL, itk_bool);
     ITK_CASE(CHAR, char);
@@ -363,7 +359,6 @@ static void itk_prim_layout_(itk_type_kind kind, size_t *sz, size_t *al)
         break;
     }
 #undef ITK_CASE
-#undef itk_alignof_
 }
 
 ITK_DEF size_t itk_type_size(const itk_type *t)

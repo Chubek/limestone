@@ -1,112 +1,223 @@
 #include "limestone.hpp"
 #include "../traceml/traceml.hpp"
+#include "../limeburg/target.hpp"
+#include "metacode/machine-ir/bridge.hpp"
 #include <limits>
 #include <map>
 #include <sstream>
+#include <set>
 
 namespace limestone {
+Result<bin2bin::ObjectFile> make_object(const Module& module,const bin2bin::ObjectTarget& target,std::string_view symbol) {
+  if(!module.encoded)return Result<bin2bin::ObjectFile>::err({Error::Code::InvalidArgument,"object emission requires an encoded module"});
+  if(!target.architecture.empty()&&module.target!=target.architecture)return Result<bin2bin::ObjectFile>::err({Error::Code::Conflict,"encoded module and object target architectures differ"});
+  std::vector<bin2bin::NamedRelocation> relocations;for(auto& r:module.encoded->relocations)relocations.push_back({r.offset,r.kind,r.symbol,r.addend});
+  return bin2bin::code_object(target,module.encoded->bytes,symbol,relocations);
+}
 namespace {
 Error stage(std::string_view name,const Error& error) {
   return {error.code,std::string(name)+": "+error.message};
 }
 Result<regtl::Program> allocation_problem(const unisel::Program& source,const PipelineTarget& target,const schedrow::Region& region,const std::vector<uint32_t>& order) {
-  regtl::Program problem;problem.classes=target.register_classes;problem.aliases=target.aliases;
+  regtl::Function function;function.classes=target.register_classes;function.aliases=target.aliases;
+  std::map<uint32_t,regtl::Block> blocks;
+  if(region.blocks.empty()){regtl::Block block{};block.id=0;block.live_out=source.outputs;blocks[0]=std::move(block);}
+  else for(auto& b:region.blocks){regtl::Block block{b.id,{},b.successors,b.live_out};if(b.successors.empty())block.live_out.insert(block.live_out.end(),source.outputs.begin(),source.outputs.end());blocks[b.id]=std::move(block);}
   std::map<uint32_t,const schedrow::Instruction*> instructions;
   for(auto& instruction:region.instructions)instructions[instruction.id]=&instruction;
-  std::map<uint32_t,std::pair<uint32_t,uint32_t>> intervals;
-  for(auto& n:source.nodes)if(!n.required&&n.produces_value)intervals[n.id]={0,0};
+  std::set<uint32_t> values,defined;
+  std::map<uint32_t,std::string> source_classes;
+  for(auto& n:source.nodes){if(!n.register_class.empty())source_classes[n.id]=n.register_class;if(!n.required&&n.produces_value){values.insert(n.id);defined.insert(n.id);}}
   if(order.size()>std::numeric_limits<uint32_t>::max()/2)return Result<regtl::Program>::err({Error::Code::ResourceLimit,"too many allocation positions"});
   for(size_t k=0;k<order.size();++k) {
-    auto& instruction=*instructions.at(order[k]);auto position=static_cast<uint32_t>(2*k);
-    // Explicit and implicit physical effects need a target allocation adapter;
-    // they are never silently reinterpreted as virtual values here.
-    if(!instruction.implicit_defs.empty()||!instruction.implicit_uses.empty())return Result<regtl::Program>::err({Error::Code::Unsupported,"implicit register effects need a target allocation adapter"});
+    auto& instruction=*instructions.at(order[k]);
     for(auto value:instruction.uses) {
-      auto it=intervals.find(value);
-      if(it==intervals.end())return Result<regtl::Program>::err({Error::Code::Conflict,"use before definition of v"+std::to_string(value)});
-      it->second.second=std::max(it->second.second,position);
+      if(region.blocks.empty()&&!defined.contains(value))return Result<regtl::Program>::err({Error::Code::Conflict,"use before definition of v"+std::to_string(value)});values.insert(value);
     }
-    for(auto value:instruction.defs)if(!intervals.emplace(value,std::pair{position,position}).second)return Result<regtl::Program>::err({Error::Code::Conflict,"multiple definitions of v"+std::to_string(value)});
+    for(auto value:instruction.defs){if(!defined.insert(value).second)return Result<regtl::Program>::err({Error::Code::Conflict,"multiple definitions of v"+std::to_string(value)});values.insert(value);}
+    for(auto& [value,klass]:instruction.register_classes){if(source_classes.contains(value)&&source_classes.at(value)!=klass)return Result<regtl::Program>::err({Error::Code::Conflict,"conflicting selected register classes"});source_classes[value]=klass;}
+    blocks.at(region.blocks.empty()?0:instruction.block).instructions.push_back({instruction.id,instruction.defs,instruction.uses,instruction.early_defs,instruction.implicit_defs,instruction.ties,instruction.implicit_defs,instruction.implicit_uses});
   }
-  for(auto value:source.outputs)if(auto it=intervals.find(value);it!=intervals.end())it->second.second=static_cast<uint32_t>(2*order.size());
-  for(auto [value,interval]:intervals) {
-    auto it=target.value_classes.find(value);auto klass=it==target.value_classes.end()?target.default_register_class:it->second;
+  for(auto& [id,block]:blocks)values.insert(block.live_out.begin(),block.live_out.end());
+  for(auto value:values) {
+    auto it=target.value_classes.find(value);auto klass=it==target.value_classes.end()?(source_classes.contains(value)?source_classes.at(value):target.default_register_class):it->second;
+    if(it!=target.value_classes.end()&&source_classes.contains(value)&&source_classes.at(value)!=klass)return Result<regtl::Program>::err({Error::Code::Conflict,"target allocation class disagrees with selected operand class"});
     if(klass.empty())return Result<regtl::Program>::err({Error::Code::Unsupported,"missing target register class for v"+std::to_string(value)});
     auto constraint=target.constraints.find(value);
-    problem.ranges.push_back({value,interval.first,interval.second,klass,constraint==target.constraints.end()?regtl::Constraint{}:constraint->second,true});
+    bool boundary=std::find(source.outputs.begin(),source.outputs.end(),value)!=source.outputs.end()||std::any_of(source.nodes.begin(),source.nodes.end(),[&](auto& n){return n.id==value&&!n.required;});for(auto& b:source.blocks)boundary|=std::find(b.live_out.begin(),b.live_out.end(),value)!=b.live_out.end();
+    function.values.push_back({value,klass,constraint==target.constraints.end()?regtl::Constraint{}:constraint->second,!boundary});
   }
-  return Result<regtl::Program>::ok(std::move(problem));
+  for(auto& [id,block]:blocks)function.blocks.push_back(std::move(block));auto analysis=regtl::analyze(function);if(!analysis)return Result<regtl::Program>::err(analysis.error());return Result<regtl::Program>::ok(std::move(analysis.value().problem));
 }
 std::string emit(const Module& module,const std::vector<uint32_t>& order) {
-  std::ostringstream out;out<<"module "<<module.name<<" {\n  function main {\n    block entry {\n";
-  if(module.allocation) {
-    std::map<uint32_t,uint32_t> registers(module.allocation->regs.begin(),module.allocation->regs.end());
+  const auto& region=module.materialized?module.materialized->region:module.selected;const auto& allocation=module.materialized?std::optional<regtl::Allocation>(module.materialized->allocation):module.allocation;
+  std::ostringstream out;out<<"module "<<module.name<<" {\n  function main {\n";
+  auto blocks=region.blocks;if(blocks.empty())blocks.push_back({0,"entry"});
+  for(auto& block:blocks) {
+  out<<"    block "<<(block.name.empty()?"bb"+std::to_string(block.id):block.name)<<" {\n";
+  if(allocation) {
+    std::map<uint32_t,uint32_t> registers(allocation->regs.begin(),allocation->regs.end());
     for(auto [value,physical]:registers)out<<"      ; v"<<value<<" -> physical "<<physical<<'\n';
-    for(auto value:module.allocation->spilled)out<<"      ; v"<<value<<" -> spill (materialization required)\n";
+    for(auto value:allocation->spilled)out<<"      ; v"<<value<<" -> spill (materialization required)\n";
+    if(module.materialized)for(auto& slot:module.materialized->slots)out<<"      ; spill v"<<slot.value<<" at frame+"<<slot.offset<<" size="<<slot.size<<" alignment="<<slot.alignment<<'\n';
   }
   std::map<uint32_t,uint32_t> cycles;
-  for(auto scheduled:module.scheduled)cycles[scheduled.id]=scheduled.cycle;
+  for(auto scheduled:module.materialized?module.materialized->scheduled:module.scheduled)cycles[scheduled.id]=scheduled.cycle;
   for(auto id:order) {
-    const auto& i=*std::find_if(module.selected.instructions.begin(),module.selected.instructions.end(),[&](auto& x){return x.id==id;});
+    const auto& i=*std::find_if(region.instructions.begin(),region.instructions.end(),[&](auto& x){return x.id==id;});
+    if(!region.blocks.empty()&&i.block!=block.id)continue;
     out<<"      ";for(size_t n=0;n<i.defs.size();++n){if(n)out<<", ";out<<'%'<<i.defs[n];}
     if(!i.defs.empty())out<<" = ";out<<i.opcode;
     for(auto value:i.uses)out<<" %"<<value;
     for(auto [value,constant]:i.immediates)out<<" #"<<constant;
+    for(auto target:i.block_targets)out<<" block %"<<target;
     if(cycles.contains(id))out<<" ; cycle "<<cycles.at(id);
     out<<'\n';
   }
-  return out.str()+"    }\n  }\n}\n";
+  out<<"    }\n";
+  }
+  return out.str()+"  }\n}\n";
 }
 }
 Result<Module> run_pipeline(const unisel::Program& input,const PipelineTarget& target,const PipelineOptions& options) {
+  std::string_view active_stage="ingest";
+  try {
   if(target.name.empty())return Result<Module>::err({Error::Code::InvalidArgument,"target has no identity"});
-  Module module;module.name="module";unisel::Program program=input;
+   Module module;module.name="module";module.target=target.name;auto prepared=unisel::prepare(input);if(!prepared)return Result<Module>::err(stage("ingest",prepared.error()));unisel::Program program=std::move(prepared.value());
   auto valid=unisel::validate(program,target.patterns);if(!valid)return Result<Module>::err(stage("ingest",valid.error()));
   module.stages.push_back("ingest");
   if(options.optimize&&target.optimizer) {
+    active_stage="optimize";
     auto optimized=target.optimizer(program);if(!optimized)return Result<Module>::err(stage("optimize",optimized.error()));
     program=std::move(optimized.value());valid=unisel::validate(program,target.patterns);
     if(!valid)return Result<Module>::err(stage("optimize",valid.error()));module.stages.push_back("optimize");
   }
-  auto selected=unisel::solve(program,target.patterns);if(!selected)return Result<Module>::err(stage("select",selected.error()));
-  auto region=unisel::emit_scheduler(program,target.patterns,selected.value());if(!region)return Result<Module>::err(stage("select",region.error()));
+    module.optimized=program;
+    active_stage="select";
+   auto region=[&]()->Result<schedrow::Region> {
+     if(options.selector==SelectionStrategy::BURS) {
+       if(!target.burs_rules)return Result<schedrow::Region>::err({Error::Code::Unsupported,"target has no BURS rules"});
+        return limeburg::select_graph(program,*target.burs_rules,"value",target.burs_policy);
+     }
+     if(options.selector!=SelectionStrategy::Global&&options.selector!=SelectionStrategy::Greedy)return Result<schedrow::Region>::err({Error::Code::InvalidArgument,"unknown selector"});
+     auto selected=options.selector==SelectionStrategy::Global?unisel::solve(program,target.patterns):unisel::solve_greedy(program,target.patterns);
+     if(!selected)return Result<schedrow::Region>::err(selected.error());return unisel::emit_scheduler(program,target.patterns,selected.value());
+   }();if(!region)return Result<Module>::err(stage("select",region.error()));
   module.selected=std::move(region.value());module.stages.push_back("select");
+  std::vector<std::pair<regtl::VReg,regtl::PReg>> fixed_registers;
   for(auto& i:module.selected.instructions) {
     auto it=target.instructions.find(i.opcode);
     if(it==target.instructions.end()) {
-      if(options.schedule)return Result<Module>::err({Error::Code::Unsupported,"schedule: missing instruction model for "+i.opcode});
-      continue;
+       return Result<Module>::err({Error::Code::Unsupported,"select: missing target instruction model for "+i.opcode});
     }
-    auto& model=it->second;
-    if(options.schedule&&!model.latency)return Result<Module>::err({Error::Code::Unsupported,"schedule: unknown target latency for "+i.opcode});
+      auto& model=it->second;
+      for(auto [index,physical]:model.fixed_definitions){if(index>=i.defs.size())return Result<Module>::err({Error::Code::Conflict,"target fixed definition index out of range: "+i.opcode});fixed_registers.emplace_back(i.defs[index],physical);}
+      for(auto [index,physical]:model.fixed_uses){if(index>=i.uses.size())return Result<Module>::err({Error::Code::Conflict,"target fixed use index out of range: "+i.opcode});fixed_registers.emplace_back(i.uses[index],physical);}
+     if((model.memory||model.access)&&!i.memory)return Result<Module>::err({Error::Code::Conflict,"target adds memory effects to selected semantics: "+i.opcode});
+     if((model.call&&!i.call)||(model.terminator&&!i.terminator)||(model.may_trap&&!i.may_trap))return Result<Module>::err({Error::Code::Conflict,"target adds call, termination, or trap effects to selected semantics: "+i.opcode});
+     if(model.control!=schedrow::ControlFlow::None&&model.control!=i.control)return Result<Module>::err({Error::Code::Conflict,"target control flow disagrees with selected semantics: "+i.opcode});
+     if(options.schedule&&!model.latency)return Result<Module>::err({Error::Code::Unsupported,"schedule: unknown target latency for "+i.opcode});
     if(model.latency)i.latency=*model.latency;
-    i.throughput=model.throughput;i.resources=model.resources;i.opcode_class=model.opcode_class;i.semantic_class=model.semantic_class;
-    i.barrier=model.barrier;i.memory=model.memory;i.implicit_defs=model.implicit_defs;i.implicit_uses=model.implicit_uses;
+     i.throughput=model.throughput;i.resources=model.resources;i.opcode_class=model.opcode_class;i.semantic_class=model.semantic_class;
+      i.speculative&=model.speculative;i.priority=model.priority;i.pressure_delta=model.pressure_delta;
+      i.barrier|=model.barrier;i.memory|=model.memory;i.implicit_defs=model.implicit_defs;i.implicit_uses=model.implicit_uses;
+      i.implicit_result_latency=model.implicit_result_latencies;
+      if(model.access){if(!i.access)return Result<Module>::err({Error::Code::Conflict,"target memory effects need explicit selected semantics"});auto& a=*i.access;auto& b=*model.access;if(a.read!=b.read||a.write!=b.write||a.volatile_access!=b.volatile_access||a.atomic!=b.atomic||a.ordering!=b.ordering||(!b.address_space.empty()&&a.address_space!=b.address_space)||(b.size&&a.size!=b.size)||(b.alignment&&(!a.alignment||a.alignment<b.alignment)))return Result<Module>::err({Error::Code::Conflict,"target memory effects disagree with selected semantics"});}
+      i.call|=model.call;i.terminator|=model.terminator;i.may_trap|=model.may_trap;i.issue_slots=model.issue_slots;
+      for(auto index:model.early_definitions){if(index>=i.defs.size())return Result<Module>::err({Error::Code::Conflict,"target early-definition index out of range"});i.early_defs.push_back(i.defs[index]);}
+       for(auto [def,use]:model.ties){if(def>=i.defs.size()||use>=i.uses.size())return Result<Module>::err({Error::Code::Conflict,"target tied operand index out of range"});i.ties.emplace_back(i.defs[def],i.uses[use]);}
+       for(auto [index,latency]:model.result_latencies){if(index>=i.defs.size())return Result<Module>::err({Error::Code::Conflict,"target result-latency index out of range"});i.result_latency[i.defs[index]]=latency;}
+       if(model.control!=schedrow::ControlFlow::None){if(i.control!=schedrow::ControlFlow::None&&i.control!=model.control)return Result<Module>::err({Error::Code::Conflict,"target control flow disagrees with selected semantics"});i.control=model.control;i.call|=i.control==schedrow::ControlFlow::Call;i.terminator|=i.control!=schedrow::ControlFlow::Call;}
   }
-  std::vector<uint32_t> order;
+    active_stage="group";
+    if(target.grouping_adapter){auto groups=target.grouping_adapter(program,module.selected);if(!groups)return Result<Module>::err(stage("group",groups.error()));module.selected.groups.insert(module.selected.groups.end(),groups.value().begin(),groups.value().end());if(!groups.value().empty())module.stages.push_back("group");}
+    valid=schedrow::validate_region(module.selected);if(!valid)return Result<Module>::err(stage("select",valid.error()));
+   std::vector<uint32_t> order;
   if(options.schedule) {
+    active_stage="schedule";
     auto scheduled=schedrow::schedule(module.selected,target.scheduling);if(!scheduled)return Result<Module>::err(stage("schedule",scheduled.error()));
     module.scheduled=std::move(scheduled.value());auto checked=schedrow::verify(module.selected,target.scheduling,module.scheduled);
     if(!checked)return Result<Module>::err(stage("schedule",checked.error()));
     for(auto i:module.scheduled)order.push_back(i.id);module.stages.push_back("schedule");
-  }else for(auto& i:module.selected.instructions)order.push_back(i.id);
+  }else if(module.selected.blocks.empty())for(auto& i:module.selected.instructions)order.push_back(i.id);
+  else for(auto& b:module.selected.blocks)for(auto& i:module.selected.instructions)if(i.block==b.id)order.push_back(i.id);
+  module.order=order;
   if(options.allocate) {
-    auto problem=allocation_problem(program,target,module.selected,order);if(!problem)return Result<Module>::err(stage("allocate",problem.error()));
-    module.allocation_problem=std::move(problem.value());auto allocated=regtl::linear_scan(module.allocation_problem);
-    if(!allocated)return Result<Module>::err(stage("allocate",allocated.error()));
-    module.allocation=std::move(allocated.value());module.stages.push_back("allocate");
+     active_stage="allocate";
+      auto problem=target.allocation_adapter?target.allocation_adapter(program,module.selected,order):allocation_problem(program,target,module.selected,order);if(!problem)return Result<Module>::err(stage("allocate",problem.error()));
+      if(!fixed_registers.empty()){auto constrained=regtl::with_fixed_registers(problem.value(),fixed_registers);if(!constrained)return Result<Module>::err(stage("allocate",constrained.error()));problem=std::move(constrained);}
+     if(!target.spill_classes.empty()){auto reserved=regtl::reserve_spill_registers(problem.value(),target.spill_classes);if(!reserved)return Result<Module>::err(stage("allocate",reserved.error()));problem=std::move(reserved);}
+     module.allocation_problem=std::move(problem.value());auto allocated=[&]()->Result<regtl::Allocation>{
+       switch(options.allocator){case AllocationStrategy::LinearScan:return regtl::linear_scan(module.allocation_problem);case AllocationStrategy::Greedy:return regtl::greedy(module.allocation_problem);case AllocationStrategy::GraphColoring:return regtl::graph_color(module.allocation_problem);case AllocationStrategy::Constraint:return regtl::constraint_allocate(module.allocation_problem);}return Result<regtl::Allocation>::err({Error::Code::InvalidArgument,"unknown allocator"});
+     }();
+     if(!allocated)return Result<Module>::err(stage("allocate",allocated.error()));
+     auto verified=regtl::verify(module.allocation_problem,allocated.value());if(!verified)return Result<Module>::err(stage("allocate",verified.error()));
+     module.allocation=std::move(allocated.value());module.stages.push_back("allocate");
+      if(!module.allocation->spilled.empty()&&!target.spill_classes.empty()) {
+        active_stage="spill";
+       auto final=regtl::materialize_spills(module.selected,order,module.allocation_problem,*module.allocation,target.spill_classes,program.outputs);if(!final)return Result<Module>::err(stage("spill",final.error()));
+        for(auto& i:final.value().region.instructions)if(std::none_of(module.selected.instructions.begin(),module.selected.instructions.end(),[&](auto& selected){return selected.id==i.id;})){
+          auto model=target.instructions.find(i.opcode);if(model!=target.instructions.end()&&model->second.access){auto& a=*i.access;auto& b=*model->second.access;if(a.read!=b.read||a.write!=b.write||a.atomic!=b.atomic||a.volatile_access!=b.volatile_access||a.ordering!=b.ordering||(!b.address_space.empty()&&a.address_space!=b.address_space)||(b.size&&a.size!=b.size)||(b.alignment&&a.alignment<b.alignment))return Result<Module>::err({Error::Code::Conflict,"spill: transfer model disagrees with private-frame semantics"});}
+            auto found=target.instructions.find(i.opcode);if(found==target.instructions.end()||(options.schedule&&!found->second.latency))return Result<Module>::err({Error::Code::Unsupported,"spill: missing transfer instruction model for "+i.opcode});auto& m=found->second;if(!m.implicit_uses.empty()||!m.implicit_defs.empty()||!m.implicit_result_latencies.empty()||!m.fixed_definitions.empty()||!m.fixed_uses.empty()||!m.ties.empty()||!m.early_definitions.empty()||m.call||m.terminator||m.control!=schedrow::ControlFlow::None)return Result<Module>::err({Error::Code::Unsupported,"spill: transfer instruction needs a target operand adapter"});if(m.latency)i.latency=*m.latency;i.throughput=m.throughput;i.resources=m.resources;i.issue_slots=m.issue_slots;i.semantic_class=m.semantic_class;i.opcode_class=m.opcode_class;i.barrier=m.barrier;i.may_trap=m.may_trap;
+          i.speculative&=m.speculative;i.priority=m.priority;i.pressure_delta=m.pressure_delta;
+          for(auto [index,latency]:m.result_latencies){if(index>=i.defs.size())return Result<Module>::err({Error::Code::Conflict,"spill: transfer result-latency index out of range"});i.result_latency[i.defs[index]]=latency;}
+       }
+       module.materialized=std::move(final.value());order=module.materialized->order;module.order=order;
+       auto hazards=regtl::allocated_dependencies(module.materialized->region,module.materialized->allocation,target.aliases);if(!hazards)return Result<Module>::err(stage("spill",hazards.error()));module.materialized->region=std::move(hazards.value());
+       if(options.schedule){auto scheduled=schedrow::schedule(module.materialized->region,target.scheduling);if(!scheduled)return Result<Module>::err(stage("spill-schedule",scheduled.error()));auto verified=schedrow::verify(module.materialized->region,target.scheduling,scheduled.value());if(!verified)return Result<Module>::err(stage("spill-schedule",verified.error()));module.materialized->scheduled=std::move(scheduled.value());order.clear();for(auto& s:module.materialized->scheduled)order.push_back(s.id);module.materialized->order=order;module.order=order;}
+        module.stages.push_back("spill");
+       }else if(module.allocation->spilled.empty()) {
+         active_stage="allocated-schedule";
+        // Physical hazards must follow the order used to form the allocation
+        // problem, which may differ from the selector's original layout.
+        auto layout=module.selected;layout.instructions.clear();
+        for(auto id:order)layout.instructions.push_back(*std::find_if(module.selected.instructions.begin(),module.selected.instructions.end(),[&](auto& i){return i.id==id;}));
+        auto hazards=regtl::allocated_dependencies(layout,*module.allocation,target.aliases);if(!hazards)return Result<Module>::err(stage("allocated-schedule",hazards.error()));module.selected=std::move(hazards.value());
+        if(options.schedule){auto final=schedrow::schedule(module.selected,target.scheduling);if(!final)return Result<Module>::err(stage("allocated-schedule",final.error()));auto checked=schedrow::verify(module.selected,target.scheduling,final.value());if(!checked)return Result<Module>::err(stage("allocated-schedule",checked.error()));module.scheduled=std::move(final.value());order.clear();for(auto& s:module.scheduled)order.push_back(s.id);module.order=order;module.stages.push_back("allocated-schedule");}
+      }
   }
-  module.machine_ir=emit(module,order);module.stages.push_back("machine-ir");return Result<Module>::ok(std::move(module));
+    active_stage="machine-ir";
+    module.machine_ir=emit(module,order);
+   machineir_bridge::RegionExchange exchange;exchange.module=module.name;exchange.target=module.target;exchange.region=module.materialized?module.materialized->region:module.selected;exchange.order=order;exchange.schedule=module.materialized?module.materialized->scheduled:module.scheduled;exchange.outputs=program.outputs;exchange.allocation=module.materialized?std::optional<regtl::Allocation>(module.materialized->allocation):module.allocation;
+   if(module.materialized){exchange.spill_slots=module.materialized->slots;exchange.frame_size=module.materialized->frame_size;}
+   std::set<uint32_t> materialized(program.outputs.begin(),program.outputs.end());for(auto& i:exchange.region.instructions){materialized.insert(i.defs.begin(),i.defs.end());materialized.insert(i.uses.begin(),i.uses.end());}
+   for(auto& b:exchange.region.blocks)materialized.insert(b.live_out.begin(),b.live_out.end());for(auto& slot:exchange.spill_slots)materialized.insert(slot.value);
+   for(auto& node:program.nodes)if(materialized.contains(node.id)){auto klass=node.register_class;if(options.allocate){auto range=std::find_if(module.allocation_problem.ranges.begin(),module.allocation_problem.ranges.end(),[&](auto& r){return r.value==node.id;});if(range==module.allocation_problem.ranges.end())return Result<Module>::err({Error::Code::Conflict,"machine-ir: missing allocated value"});klass=range->klass;}exchange.values.push_back({node.id,node.type,klass});}
+   if(module.materialized)for(auto [value,source]:module.materialized->value_sources){auto node=std::find_if(program.nodes.begin(),program.nodes.end(),[&](auto& n){return n.id==source;});auto range=std::find_if(module.allocation_problem.ranges.begin(),module.allocation_problem.ranges.end(),[&](auto& r){return r.value==source;});exchange.values.push_back({value,node->type,range->klass});}
+   auto handoff=machineir_bridge::serialize(exchange);if(!handoff)return Result<Module>::err(stage("machine-ir",handoff.error()));module.machine_ir_exchange=std::move(handoff.value());module.stages.push_back("machine-ir");
+    if(options.encode) {
+      active_stage="encode";
+     if(!target.backend)return Result<Module>::err({Error::Code::Unsupported,"encode: target has no backend adapter"});
+     auto encoded=target.backend(module);if(!encoded)return Result<Module>::err(stage("encode",encoded.error()));
+     for(auto& relocation:encoded.value().relocations)if(relocation.offset>=encoded.value().bytes.size()||relocation.kind.empty()||relocation.symbol.empty())return Result<Module>::err({Error::Code::Conflict,"encode: malformed backend relocation"});
+     module.encoded=std::move(encoded.value());module.stages.push_back("encode");
+   }
+    return Result<Module>::ok(std::move(module));
+  }catch(const Error& error){return Result<Module>::err(stage(active_stage,error));}
+  catch(const std::bad_alloc&){return Result<Module>::err(stage(active_stage,{Error::Code::ResourceLimit,"allocation failed"}));}
+  catch(const std::exception& error){return Result<Module>::err(stage(active_stage,{Error::Code::Internal,error.what()}));}
+  catch(...){return Result<Module>::err(stage(active_stage,{Error::Code::Internal,"pipeline adapter exception"}));}
 }
 Result<Module> run_pipeline(std::string_view input,const PipelineOptions& options) {
   auto compiled=traceml::compile(input);if(!compiled)return Result<Module>::err(stage("frontend",compiled.error()));
-  auto value=traceml::evaluate(compiled.value());if(!value)return Result<Module>::err(stage("frontend",value.error()));
+  traceml::ExecutionOptions execution_options;execution_options.record_trace=options.trace_execution;
+  auto execution=traceml::execute(compiled.value(),execution_options);if(!execution)return Result<Module>::err(stage("frontend",execution.error()));
   // Portable IR pseudo-instruction selection belongs to the frontend adapter.
-  auto lowered=traceml::lower_graph(value.value());PipelineTarget target;target.name="portable-machineir";
+  auto lowering=options.trace_execution?traceml::lower_trace(execution.value()):Result<traceml::PortableLowering>::ok(traceml::lower_graph(execution.value().value));if(!lowering)return Result<Module>::err(stage("trace-lambda",lowering.error()));
+  auto lowered=std::move(lowering.value());PipelineTarget target;target.name="portable-machineir";
   target.patterns=std::move(lowered.patterns);
-  for(auto& i:lowered.instruction_models)target.instructions.emplace(i.opcode,InstructionModel{i.latency,i.throughput,i.resources,i.opcode_class,i.semantic_class,i.barrier,i.memory});
+  for(auto& i:lowered.instruction_models){InstructionModel model{i.latency,i.throughput,i.resources,i.opcode_class,i.semantic_class,i.barrier,i.memory};model.terminator=i.terminator;target.instructions.emplace(i.opcode,std::move(model));}
   auto result=run_pipeline(lowered.program,target,options);
-  if(result)result.value().stages.insert(result.value().stages.begin(),{"frontend","trace-lambda"});
+  if(result){result.value().stages.insert(result.value().stages.begin(),{"frontend","trace-lambda"});if(options.trace_execution)result.value().execution=std::move(execution.value());}
+  return result;
+}
+Result<Module> run_pipeline(std::string_view input,const PipelineTarget& target,const PipelineOptions& options) {
+  auto compiled=traceml::compile(input);if(!compiled)return Result<Module>::err(stage("frontend",compiled.error()));
+  traceml::ExecutionOptions execution_options;execution_options.record_trace=options.trace_execution;
+  auto execution=traceml::execute(compiled.value(),execution_options);if(!execution)return Result<Module>::err(stage("frontend",execution.error()));
+  auto lowering=options.trace_execution?traceml::lower_trace(execution.value()):Result<traceml::PortableLowering>::ok(traceml::lower_graph(execution.value().value));if(!lowering)return Result<Module>::err(stage("trace-lambda",lowering.error()));
+  auto result=run_pipeline(lowering.value().program,target,options);
+  if(result){result.value().stages.insert(result.value().stages.begin(),{"frontend","trace-lambda"});if(options.trace_execution)result.value().execution=std::move(execution.value());}
   return result;
 }
 }

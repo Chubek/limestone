@@ -82,7 +82,7 @@ struct Reader {
       Value::Array a;
       // Skip the outer Value to collect only immediate array elements.
       auto array=child(n,"Array");
-      for(auto x:collect(array,"Value"))a.push_back(value(x));
+      for(auto x:collect(array,"ArrayValue"))a.push_back(value(x));
       v=Value(std::move(a));
     } else {
       int64_t number=0;

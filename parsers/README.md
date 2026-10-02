@@ -8,6 +8,14 @@ truth; generated C tables, C++ headers, and C++ implementations live under
 
 ## Languages
 
+`source.hpp` supplies the shared owning resolver and cumulative include budgets
+used by the Unisel and Limeburg semantic loaders. Includes splice parsed AST
+declarations, retaining each file's source spans. File loaders opt into relative
+filesystem access and canonical cycle detection; text loaders use an explicit
+host resolver. Defaults are 16 MiB, 128 document occurrences, and 32 include
+levels. `origin` clauses preserve selection-rule provenance across canonical
+serialization.
+
 | Grammar | Syntax represented | Example |
 | --- | --- | --- |
 | `isa.g` | Infobank architectures, sections, registers, encodings, operations, nested values and semantic S-expressions | [`isa.isa`](examples/isa.isa) |

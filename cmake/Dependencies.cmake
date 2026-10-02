@@ -35,7 +35,7 @@ add_library(limestone_mkdparse STATIC
   ${dparser_dir}/grammar.g.c ${dparser_dir}/gram.c ${dparser_dir}/lex.c
   ${dparser_dir}/lr.c)
 foreach(target IN ITEMS limestone_dparse limestone_mkdparse)
-  target_include_directories(${target} SYSTEM PUBLIC ${dparser_dir})
+  target_include_directories(${target} SYSTEM PUBLIC $<BUILD_INTERFACE:${dparser_dir}>)
   target_compile_definitions(${target} PRIVATE D_MAJOR_VERSION=1 D_MINOR_VERSION=30)
 endforeach()
 add_executable(limestone-make-dparser ${dparser_dir}/make_dparser.c)

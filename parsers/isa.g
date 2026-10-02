@@ -18,10 +18,12 @@ Field: FieldName '=' Value? ';' | FieldName '=' Object | FieldName '{' Fields '}
 FieldName: Ident ('[' Number ':' Number ']')?;
 /* Bare metadata is a fallback: prefer a structured value when both parses exist. */
 Value: String | Number | Boolean | Array | Object | SExpr | CallList | BareList -1;
-Array: '[' (Value (',' Value)*)? ']';
+Array: '[' (ArrayValue (',' ArrayValue)*)? ']';
+/* A bare comma-list is a field value, never one element of a bracketed array. */
+ArrayValue: String | Number | Boolean | Array | Object | SExpr | Call | Ident -1;
 Object: '{' Fields '}';
 CallList: Call (',' Call)*;
-Call: Ident '(' (Value (',' Value)*)? ')';
+Call: Ident '(' (ArrayValue (',' ArrayValue)*)? ')';
 SExpr: '(' SExprItem* ')';
 SExprItem: String | Number | Ident | SExpr;
 Boolean: 'true' | 'false';

@@ -179,6 +179,33 @@ traces with rule locations. Expanded-stream locations are explicitly marked when
 EkippX changes the input. Concrete IL type/effect verification and reconstruction
 remain responsibilities of the respective IL adapters.
 
+`unisel_adapter.hpp` implements a concrete typed bidirectional graph adapter.
+Hosts explicitly register pure concrete operator signatures and justified rules.
+Ingress, extracted-term legality, transactional reconstruction, deterministic
+value remapping, effect/CFG/live-out preservation, and pure dead-node pruning are
+verified at the adapter boundary. Other IL adapters retain the same lifecycle.
+
+`binary_adapter.hpp` supplies the lifted-semantic Bin2Bin adapter via the separate
+`tunah_bin2bin` target. It snapshots a Session and requires host legality analysis
+at ingress and extraction plus an explicit semantic/analysis context identity.
+Operators, rules, conditions, costs and budgets enter its deterministic cache
+identity. Cooperative time/cancellation limits disable translated-byte cache
+reuse. Bin2Bin owns target matching, encoding, branch relocation and layout;
+instruction/control boundaries remain intact. CFG-changing binary optimization
+requires a region adapter rather than mutating those boundaries through a term.
+
+`limestone/optimization.h` / `Limestone::optimization` supplies opaque owning C
+sessions and results for the same term/rule engine, with costs, budgets, match
+traces, proof predicates and cooperative cancellation. Callback userdata may
+have a nonthrowing release retained by owning snapshots. The core's
+`limestone_target_set_optimizer` copies typed graph declarations and session
+configuration into a pipeline target; later source mutation/destruction does
+not change it. Optional Python wrappers consume this C ABI.
+`limestone_optimizer_binary_transform` exposes the same owning Bin2Bin adapter
+through C/Python, requiring a legality callback and semantic context identity.
+Offline translation and synchronous runtime creation copy the transform; budget
+and cancellation policies preserve the C++ adapter's cache separation.
+
 ---
 
 ## 7. IL Adapter Contract, Lifecycle, Normalization, Legality, and Diagnostics

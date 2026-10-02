@@ -39,6 +39,10 @@ struct MemoryOperand {
     string ordering;
     string alignment;
     string addressExpression;
+    // Symbolic address spaces and alias facts remain valid before target layout.
+    string addressSpaceName;
+    uint[] aliasSets;
+    uint size;
 }
 
 struct Operand {
@@ -89,6 +93,7 @@ struct EffectSet {
     bool atomic;
     bool serializing;
     bool privileged;
+    MemoryOperand[] memoryAccesses;
 }
 
 struct MachineInstruction {
@@ -111,6 +116,8 @@ class MachineBasicBlock {
     MachineInstruction[] instructions;
     uint[] successors;
     uint[] predecessors;
+    // Explicit values exported beyond this region's CFG boundary.
+    RegisterRef[] liveOut;
 
     this(uint id, string label="") { this.id=id; this.label=label; }
     void append(MachineInstruction i) { instructions ~= i; }
@@ -135,6 +142,12 @@ class MachineFunction {
     MachineBasicBlock newBlock(string label="") {
         auto b=new MachineBasicBlock(nextBlock++,label);
         blocks ~= b; return b;
+    }
+    /** Import a stable block identifier, keeping later IDs disjoint. */
+    MachineBasicBlock importBlock(uint id,string label="") {
+        foreach(b;blocks)if(b.id==id)throw new Exception("duplicate imported block");
+        if(id==uint.max)throw new Exception("block identity exhausted");
+        auto b=new MachineBasicBlock(id,label);blocks~=b;if(nextBlock<=id)nextBlock=id+1;return b;
     }
     RegisterRef newVReg(string cls, uint width) {
         auto r=RegisterRef.vreg(format("v%u",nextVReg++),cls,width);

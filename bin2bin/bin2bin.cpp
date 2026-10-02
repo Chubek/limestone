@@ -1,4 +1,5 @@
 #include "bin2bin.hpp"
+#include "codec_internal.hpp"
 #include <SExprTk.hpp>
 #include <filesystem>
 #include <iomanip>
@@ -33,12 +34,21 @@ std::string identity(const Architecture& a) {
   std::map<uint8_t,Status> statuses(a.status.begin(),a.status.end());
   field(out,std::to_string(statuses.size()));
   for(auto [opcode,status]:statuses){field(out,std::to_string(opcode));field(out,std::to_string(static_cast<int>(status)));}
+  field(out,"control");std::map<uint8_t,ControlFlow> controls(a.control.begin(),a.control.end());field(out,std::to_string(controls.size()));for(auto [opcode,flow]:controls){field(out,std::to_string(opcode));field(out,std::to_string(static_cast<int>(flow)));}
+  field(out,a.endianness);
+  auto forms=a.forms;std::sort(forms.begin(),forms.end(),[](auto& x,auto& y){return x.id<y.id;});
+  field(out,std::to_string(forms.size()));
+  for(auto& f:forms){for(auto& s:{std::to_string(f.id),f.mnemonic,std::to_string(f.width),std::to_string(f.mask),std::to_string(f.base),f.semantics,std::to_string(static_cast<int>(f.status)),std::to_string(static_cast<int>(f.control)),f.target_operand,std::to_string(f.fields.size())})field(out,s);for(auto& p:f.fields)for(auto& s:{p.name,std::to_string(p.lsb),std::to_string(p.width),std::to_string(static_cast<int>(p.kind)),p.register_class,std::to_string(p.scale),std::to_string(p.relative_to_end)})field(out,s);}
+  field(out,std::to_string(a.registers.size()));
+  for(auto& [klass,regs]:a.registers){field(out,klass);field(out,std::to_string(regs.size()));for(auto& [id,name]:regs){field(out,std::to_string(id));field(out,name);}}
   return out;
 }
 std::string cache_key(const Architecture& src,const Architecture& dst,std::span<const uint8_t> bytes,const TranslationOptions& options) {
-  std::string key="bin2bin:2:translation-schema:1:";
+  std::string key="bin2bin:5:translation-schema:1:";
   field(key,identity(src));field(key,identity(dst));
   for(auto& s:{options.rule_version,options.optimization_configuration,options.translator_configuration,options.plugin_versions,options.runtime_configuration})field(key,s);
+  field(key,std::to_string(options.source_address));field(key,std::to_string(options.target_address));
+  field(key,options.semantic_transform?"transform":"identity");if(options.semantic_transform)field(key,options.semantic_transform->identity);
   field(key,{reinterpret_cast<const char*>(bytes.data()),bytes.size()});
   return key;
 }
@@ -140,7 +150,6 @@ Result<int> open_cache(TranslationCache& cache,const std::string& path,size_t ma
 Result<Architecture> from_metacode(const metacode::Architecture& source) {
   auto tooling=object(source.fields,"tooling");auto contract=tooling?object(*tooling,"bin2bin"):nullptr;
   if(!contract||text(*contract,"schema_version")!="1")return Result<Architecture>::err({Error::Code::InvalidArgument,"missing or unsupported tooling.bin2bin schema"});
-  if(text(*contract,"instruction_encoding")!="fixed8")return Result<Architecture>::err({Error::Code::Unsupported,"no decoder adapter for "+text(*contract,"instruction_encoding")});
   Architecture out;out.name=source.name;out.version=source.version;out.execution_domain=text(*contract,"execution_domain");
   auto profile=object(source.fields,"profile");
   if(out.execution_domain.empty()||!profile||text(*profile,"execution_model").empty())return Result<Architecture>::err({Error::Code::InvalidArgument,"missing execution domain/state model"});
@@ -151,6 +160,8 @@ Result<Architecture> from_metacode(const metacode::Architecture& source) {
   for(auto&[name,value]:aliases){field(out.description,name);field(out.description,value);}
   std::map<std::string,metacode::Value::Object> encodings(source.encodings.begin(),source.encodings.end());
   for(auto&[name,fields]:encodings){field(out.description,name);field(out.description,metacode::Value(fields).text());}
+  if(text(*contract,"instruction_encoding")=="masked")return detail::load_masked(source,std::move(out));
+  if(text(*contract,"instruction_encoding")!="fixed8")return Result<Architecture>::err({Error::Code::Unsupported,"no decoder adapter for "+text(*contract,"instruction_encoding")});
   for(auto& op:source.operations) {
     auto encoding=source.encodings.find(text(op.fields,"encoding"));
     if(encoding==source.encodings.end()||text(encoding->second,"width")!="8")return Result<Architecture>::err({Error::Code::Unsupported,"instruction encoding is not a complete byte: "+op.name});
@@ -163,21 +174,25 @@ Result<Architecture> from_metacode(const metacode::Architecture& source) {
     if(auto operands=op.fields.find("operands");operands!=op.fields.end()&&operands->second.text()!=""&&operands->second.text()!="[]")return Result<Architecture>::err({Error::Code::Unsupported,"operand-bearing instructions require a decoder adapter"});
     auto op_tooling=object(op.fields,"tooling");auto bt=op_tooling?object(*op_tooling,"binary_translation"):nullptr;
     auto opcode=static_cast<uint8_t>(code);
-    if(!bt||text(*bt,"schema_version")!="1"||text(*bt,"equivalence_basis")!="semantics")out.status[opcode]=Status::Unsupported;
-    else {auto semantic=normalize(op.semantics);if(!semantic)return Result<Architecture>::err(semantic.error());out.semantics[opcode]=std::move(semantic.value());}
+    EncodingForm form;auto checked=detail::translation_contract(bt,form);if(!checked)return Result<Architecture>::err(checked.error());
+    if(!form.target_operand.empty())return Result<Architecture>::err({Error::Code::Unsupported,"byte instruction target needs an operand codec: "+op.name});
+    if(form.status!=Status::Supported)out.status[opcode]=form.status;
+    if(form.control!=ControlFlow::Fallthrough)out.control[opcode]=form.control;
+    if(form.status==Status::Supported){auto semantic=normalize(op.semantics);if(!semantic)return Result<Architecture>::err(semantic.error());out.semantics[opcode]=std::move(semantic.value());}
     field(out.description,op.name);field(out.description,metacode::Value(op.fields).text());
   }
-  return Result<Architecture>::ok(std::move(out));
+  auto valid=validate(out);if(!valid)return Result<Architecture>::err(valid.error());return Result<Architecture>::ok(std::move(out));
 }
 Result<std::vector<Instruction>> decode(const Architecture& a,std::span<const uint8_t> bytes,uint64_t address) {
-  if(a.name.empty())return Result<std::vector<Instruction>>::err({Error::Code::InvalidArgument,"architecture has no identity"});
+  if(!a.forms.empty())return detail::decode_masked(a,bytes,address);
+  auto valid=validate(a);if(!valid)return Result<std::vector<Instruction>>::err(valid.error());
   if(!bytes.empty()&&bytes.size()-1>std::numeric_limits<uint64_t>::max()-address)return Result<std::vector<Instruction>>::err({Error::Code::InvalidArgument,"instruction address overflow"});
   std::vector<Instruction> out;
   for(size_t i=0;i<bytes.size();++i) {
     auto opcode=bytes[i];Instruction instruction{address+i,opcode,{opcode}};
     auto it=a.opcodes.find(opcode);
     if(it==a.opcodes.end()){instruction.status=Status::Unsupported;instruction.mnemonic=".byte";}
-    else {instruction.mnemonic=it->second;instruction.status=status(a,opcode);}
+    else {instruction.mnemonic=it->second;instruction.status=status(a,opcode);if(a.control.contains(opcode))instruction.control=a.control.at(opcode);}
     out.push_back(std::move(instruction));
   }
   return Result<std::vector<Instruction>>::ok(std::move(out));
@@ -188,31 +203,36 @@ Result<std::vector<LiftedInstruction>> lift(const Architecture& a,std::span<cons
   for(auto& instruction:decoded.value()) {
     if(instruction.status!=Status::Supported)return Result<std::vector<LiftedInstruction>>::err({Error::Code::Unsupported,"cannot lift instruction at "+std::to_string(instruction.address)});
     auto it=a.semantics.find(instruction.opcode);
-    auto semantic=normalize(it==a.semantics.end()?"":it->second);if(!semantic)return Result<std::vector<LiftedInstruction>>::err(semantic.error());
-    out.push_back({instruction.address,std::move(semantic.value()),instruction.status});
+    auto semantic=instruction.encoding_id?detail::semantics(a,instruction):normalize(it==a.semantics.end()?"":it->second);if(!semantic)return Result<std::vector<LiftedInstruction>>::err(semantic.error());
+    out.push_back({instruction.address,std::move(semantic.value()),instruction.status,instruction.control,instruction.branch_target});
   }
   return Result<std::vector<LiftedInstruction>>::ok(std::move(out));
 }
 Result<std::vector<uint8_t>> translate(const Architecture& src,const Architecture& dst,std::span<const uint8_t> bytes,TranslationCache* cache,const TranslationOptions& options) {
-  auto decoded=decode(src,bytes);if(!decoded)return Result<std::vector<uint8_t>>::err(decoded.error());
-  if(dst.name.empty())return Result<std::vector<uint8_t>>::err({Error::Code::InvalidArgument,"target architecture has no identity"});
+  if(options.semantic_transform){auto& transform=*options.semantic_transform;if(transform.identity.empty()||!transform.apply)return Result<std::vector<uint8_t>>::err({Error::Code::InvalidArgument,"semantic transformer requires an identity and callable"});if(!transform.cacheable)cache=nullptr;}
+  // Masked layout remaps the one-past-end source boundary as well as instruction
+  // addresses, including when the input itself uses the byte codec.
+  if((!src.forms.empty()||!dst.forms.empty())&&bytes.size()>UINT64_MAX-options.source_address)return Result<std::vector<uint8_t>>::err({Error::Code::InvalidArgument,"source translation address range overflow"});
+  auto decoded=decode(src,bytes,options.source_address);if(!decoded)return Result<std::vector<uint8_t>>::err(decoded.error());
+  auto valid=validate(dst);if(!valid)return Result<std::vector<uint8_t>>::err(valid.error());
+  if(src.forms.empty()&&dst.forms.empty()&&!bytes.empty()&&bytes.size()-1>UINT64_MAX-options.target_address)return Result<std::vector<uint8_t>>::err({Error::Code::InvalidArgument,"target instruction address overflow"});
   for(auto& instruction:decoded.value())if(instruction.status!=Status::Supported)return Result<std::vector<uint8_t>>::err({Error::Code::Unsupported,"source instruction is not translatable at "+std::to_string(instruction.address)});
   auto key=cache_key(src,dst,bytes,options);
   if(cache){auto hit=cached(*cache,key);if(!hit)return Result<std::vector<uint8_t>>::err(hit.error());if(hit.value())return Result<std::vector<uint8_t>>::ok(std::move(*hit.value()));}
   std::vector<uint8_t> out;
-  if(identity(src)==identity(dst))out.assign(bytes.begin(),bytes.end());
+  if(!src.forms.empty()||!dst.forms.empty()){auto translated=detail::translate_masked(src,dst,bytes,options);if(!translated)return translated;out=std::move(translated.value());}
   else {
     if(src.state_model.empty()||src.state_model!=dst.state_model||src.execution_domain.empty()||src.execution_domain!=dst.execution_domain)return Result<std::vector<uint8_t>>::err({Error::Code::Unsupported,"translation requires matching explicit execution/state models"});
-    std::map<std::string,uint8_t> targets;
+    std::map<std::pair<std::string,ControlFlow>,uint8_t> targets;
     std::map<uint8_t,std::string> names(dst.opcodes.begin(),dst.opcodes.end());
     for(auto&[opcode,name]:names)if(status(dst,opcode)==Status::Supported) {
       auto it=dst.semantics.find(opcode);if(it==dst.semantics.end())continue;
       auto semantic=normalize(it->second);if(!semantic)return Result<std::vector<uint8_t>>::err(semantic.error());
-      targets.emplace(semantic.value(),opcode);
+      targets.emplace(std::pair{semantic.value(),dst.control.contains(opcode)?dst.control.at(opcode):ControlFlow::Fallthrough},opcode);
     }
-    auto lifted=lift(src,bytes);if(!lifted)return Result<std::vector<uint8_t>>::err(lifted.error());
-    for(auto& instruction:lifted.value()) {
-      auto it=targets.find(instruction.semantics);
+    auto lifted=lift(src,bytes,options.source_address);if(!lifted)return Result<std::vector<uint8_t>>::err(lifted.error());
+    for(size_t k=0;k<lifted.value().size();++k) {
+      auto& instruction=lifted.value()[k];auto equivalent=detail::transformed_semantics(options,instruction);if(!equivalent)return Result<std::vector<uint8_t>>::err(equivalent.error());auto canonical=normalize(equivalent.value());if(!canonical)return Result<std::vector<uint8_t>>::err(canonical.error());auto it=targets.find({canonical.value(),instruction.control});
       if(it==targets.end())return Result<std::vector<uint8_t>>::err({Error::Code::Unsupported,"no semantically equivalent target instruction at "+std::to_string(instruction.address)});
       out.push_back(it->second);
     }
@@ -222,7 +242,7 @@ Result<std::vector<uint8_t>> translate(const Architecture& src,const Architectur
 }
 std::string disassemble(const std::vector<Instruction>& instructions) {
   std::ostringstream out;
-  for(auto& i:instructions){out<<std::hex<<i.address<<": "<<i.mnemonic;if(i.mnemonic==".byte")out<<" 0x"<<std::setw(2)<<std::setfill('0')<<unsigned(i.opcode);if(i.status!=Status::Supported)out<<" ; unsupported";out<<'\n';}
+  for(auto& i:instructions){out<<std::hex<<i.address<<": "<<i.mnemonic;for(auto& [name,value]:i.operands)out<<" "<<name<<"="<<value;if(i.mnemonic==".byte")out<<" 0x"<<std::setw(2)<<std::setfill('0')<<unsigned(i.opcode);if(i.status!=Status::Supported)out<<" ; unsupported";out<<'\n';}
   return out.str();
 }
 Result<std::string> decompile(const Architecture& a,std::span<const uint8_t> bytes,uint64_t address) {

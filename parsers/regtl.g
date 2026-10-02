@@ -16,7 +16,7 @@ Clobber: 'clobber' Unsigned '=' PhysicalList ';';
 SpillSlot: 'spill_slot' Name '{' Attribute* '}';
 Function: 'function' Name '{' Block* '}';
 Block: 'block' Name '{' Transfer* '}';
-Transfer: Move | ParallelCopy | Instruction | Successor;
+Transfer: Move | ParallelCopy | Instruction | Successor | Attribute;
 Move: 'move' Operand '<-' Operand ';';
 ParallelCopy: 'parallel' '{' Move* '}';
 Successor: 'successor' Name ';';
