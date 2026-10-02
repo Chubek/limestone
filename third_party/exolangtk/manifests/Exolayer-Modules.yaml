@@ -1,0 +1,11 @@
+modules:
+  - name: Exolayer::callbacks
+    header: ../../exolayer/exolayer.h
+    brief: Host callback registration and versioned native extension loading.
+    stability: experimental
+    depends_on: [ExtensionTk::dynload]
+    provides:
+      types: [exl_context_t, exl_library_t, exl_kind_t, exl_value_t, exl_native_fn, exl_extension_symbol_t, exl_extension_descriptor_t]
+      functions: [exl_context_create, exl_context_destroy, exl_register, exl_call, exl_last_error, exl_library_open, exl_library_close]
+      macros: [EXL_DEF, EXL_EXTENSION_ABI_VERSION, EXL_EXOLAYER_IMPLEMENTATION]
+      constants: [EXL_VOID, EXL_I64, EXL_F64, EXL_PTR]

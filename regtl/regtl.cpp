@@ -1,22 +1,125 @@
 #include "regtl.hpp"
+#include <map>
+
 namespace limestone::regtl {
-Result<Allocation> linear_scan(const Program&p){
- std::unordered_set<VReg> seen;
- for(auto&r:p.ranges){if(r.begin>r.end)return Result<Allocation>::err({Error::Code::InvalidArgument,"live range begins after it ends"});if(!seen.insert(r.value).second)return Result<Allocation>::err({Error::Code::InvalidArgument,"duplicate virtual register"});}
- auto rs=p.ranges;std::sort(rs.begin(),rs.end(),[](auto&a,auto&b){return a.begin<b.begin|| (a.begin==b.begin&&a.value<b.value);});
- Allocation a;struct Active{VReg v;uint32_t end;PReg r;};std::vector<Active> active;
- auto expire=[&](uint32_t b){active.erase(std::remove_if(active.begin(),active.end(),[&](auto&x){if(x.end<b)return true;return false;}),active.end());};
- for(auto&r:rs){expire(r.begin);std::vector<PReg> avail;for(auto&c:p.classes)if(c.name==r.klass)avail=c.members;
- if(avail.empty()) return Result<Allocation>::err({Error::Code::InvalidArgument,"unknown or empty register class: "+r.klass});
- if(!r.constraint.allowed.empty()){std::vector<PReg> filtered;for(auto x:avail)if(std::find(r.constraint.allowed.begin(),r.constraint.allowed.end(),x)!=r.constraint.allowed.end())filtered.push_back(x);avail.swap(filtered);}
- for(auto x:r.constraint.forbidden)avail.erase(std::remove(avail.begin(),avail.end(),x),avail.end());
- if(r.constraint.fixed){if(std::any_of(active.begin(),active.end(),[&](auto&x){return x.r==*r.constraint.fixed;})) {if(!r.spillable)return Result<Allocation>::err({Error::Code::Unsatisfiable,"fixed register conflict"});a.spilled.push_back(r.value);continue;}a.regs[r.value]=*r.constraint.fixed;active.push_back({r.value,r.end,*r.constraint.fixed});continue;}
- avail.erase(std::remove_if(avail.begin(),avail.end(),[&](PReg x){return std::any_of(active.begin(),active.end(),[&](auto&a){return a.r==x;});}),avail.end());
- if(avail.empty()){if(!r.spillable)return Result<Allocation>::err({Error::Code::Unsatisfiable,"register pressure exceeds class"});a.spilled.push_back(r.value);continue;}
- auto reg=*std::min_element(avail.begin(),avail.end());a.regs[r.value]=reg;active.push_back({r.value,r.end,reg});
- }
- return Result<Allocation>::ok(std::move(a));
+namespace {
+bool overlaps(const LiveRange& a,const LiveRange& b) { return a.begin<=b.end&&b.begin<=a.end; }
+bool aliases(const Program& p,PReg a,PReg b) {
+  if(a==b)return true;
+  return std::any_of(p.aliases.begin(),p.aliases.end(),[&](auto& pair){return pair==std::pair{a,b}||pair==std::pair{b,a};});
 }
-Result<int> verify(const Program&p,const Allocation&a){for(auto&r:p.ranges){if(a.spilled.end()!=std::find(a.spilled.begin(),a.spilled.end(),r.value))continue;auto it=a.regs.find(r.value);if(it==a.regs.end())return Result<int>::err({Error::Code::Conflict,"unassigned value"});if(r.constraint.fixed&&it->second!=*r.constraint.fixed)return Result<int>::err({Error::Code::Conflict,"fixed-register violation"});if(std::find(r.constraint.forbidden.begin(),r.constraint.forbidden.end(),it->second)!=r.constraint.forbidden.end())return Result<int>::err({Error::Code::Conflict,"forbidden-register violation"});}for(size_t i=0;i<p.ranges.size();++i)for(size_t j=i+1;j<p.ranges.size();++j)if(p.ranges[i].end>=p.ranges[j].begin&&p.ranges[j].end>=p.ranges[i].begin){auto a1=a.regs.find(p.ranges[i].value),a2=a.regs.find(p.ranges[j].value);if(a1!=a.regs.end()&&a2!=a.regs.end()&&a1->second==a2->second)return Result<int>::err({Error::Code::Conflict,"interference violation"});}return Result<int>::ok(0);}
-std::string print(const Program&p){std::string s="RegTL\n";for(auto&r:p.ranges)s+="v"+std::to_string(r.value)+" ["+std::to_string(r.begin)+","+std::to_string(r.end)+"] "+r.klass+"\n";return s;}
+std::vector<PReg> legal(const Program& p,const LiveRange& r) {
+  std::vector<PReg> regs;
+  for(auto& c:p.classes)if(c.name==r.klass)regs=c.members;
+  std::erase_if(regs,[&](PReg x){
+    if(r.constraint.fixed&&x!=*r.constraint.fixed)return true;
+    if(!r.constraint.allowed.empty()&&std::find(r.constraint.allowed.begin(),r.constraint.allowed.end(),x)==r.constraint.allowed.end())return true;
+    if(std::find(r.constraint.forbidden.begin(),r.constraint.forbidden.end(),x)!=r.constraint.forbidden.end())return true;
+    for(auto& c:p.clobbers)if(r.begin<c.position&&c.position<r.end)
+      for(auto clobbered:c.registers)if(aliases(p,x,clobbered))return true;
+    return false;
+  });
+  std::sort(regs.begin(),regs.end());return regs;
+}
+Result<Allocation> assign(const Program& p,std::vector<const LiveRange*> order) {
+  auto v=validate(p);if(!v)return Result<Allocation>::err(v.error());
+  Allocation a;
+  std::map<VReg,const LiveRange*> ranges;
+  for(auto& r:p.ranges)ranges[r.value]=&r;
+  for(auto r:order) {
+    auto available=legal(p,*r);
+    std::optional<PReg> chosen;
+    for(auto x:available) {
+      bool busy=false;
+      for(auto& [value,reg]:a.regs)if(overlaps(*r,*ranges.at(value))&&aliases(p,x,reg)){busy=true;break;}
+      // Reserve fixed locations for intervals that have not been visited yet.
+      for(auto& other:p.ranges)if(other.value!=r->value&&other.constraint.fixed&&overlaps(*r,other)&&aliases(p,x,*other.constraint.fixed)){busy=true;break;}
+      if(!busy){chosen=x;break;}
+    }
+    if(!chosen&&(!r->spillable||r->constraint.fixed)) {
+      for(auto x:available) {
+        std::vector<VReg> victims;bool possible=true;
+        for(auto& [value,reg]:a.regs)if(overlaps(*r,*ranges.at(value))&&aliases(p,x,reg)) {
+          auto other=ranges.at(value);
+          if(!other->spillable||other->constraint.fixed){possible=false;break;}
+          victims.push_back(value);
+        }
+        for(auto& other:p.ranges)if(other.value!=r->value&&other.constraint.fixed&&overlaps(*r,other)&&aliases(p,x,*other.constraint.fixed))possible=false;
+        if(possible) {
+          for(auto victim:victims){a.regs.erase(victim);a.spilled.push_back(victim);}
+          chosen=x;break;
+        }
+      }
+    }
+    if(chosen)a.regs[r->value]=*chosen;
+    else if(r->spillable&&!r->constraint.fixed)a.spilled.push_back(r->value);
+    else return Result<Allocation>::err({Error::Code::Unsatisfiable,"no legal register for v"+std::to_string(r->value)+" in "+r->klass});
+  }
+  std::sort(a.spilled.begin(),a.spilled.end());
+  auto verified=verify(p,a);if(!verified)return Result<Allocation>::err(verified.error());
+  return Result<Allocation>::ok(std::move(a));
+}
+}
+Result<int> validate(const Program& p) {
+  std::unordered_set<std::string> classes;std::unordered_set<PReg> physical;
+  for(auto& c:p.classes) {
+    if(c.name.empty()||c.members.empty()||!classes.insert(c.name).second)return Result<int>::err({Error::Code::InvalidArgument,"invalid or duplicate register class: "+c.name});
+    std::unordered_set<PReg> members;
+    for(auto r:c.members){physical.insert(r);if(!members.insert(r).second)return Result<int>::err({Error::Code::InvalidArgument,"duplicate physical register in class"});}
+  }
+  for(auto [a,b]:p.aliases)if(!physical.contains(a)||!physical.contains(b))return Result<int>::err({Error::Code::InvalidArgument,"unknown register alias"});
+  for(auto& c:p.clobbers)for(auto x:c.registers)if(!physical.contains(x))return Result<int>::err({Error::Code::InvalidArgument,"unknown clobbered register"});
+  std::unordered_set<VReg> seen;
+  for(auto& r:p.ranges) {
+    if(r.begin>r.end||!seen.insert(r.value).second)return Result<int>::err({Error::Code::InvalidArgument,"invalid live range or duplicate virtual register"});
+    if(!classes.contains(r.klass))return Result<int>::err({Error::Code::InvalidArgument,"unknown register class: "+r.klass});
+    for(auto x:r.constraint.allowed)if(!physical.contains(x))return Result<int>::err({Error::Code::InvalidArgument,"unknown allowed register"});
+    for(auto x:r.constraint.forbidden)if(!physical.contains(x))return Result<int>::err({Error::Code::InvalidArgument,"unknown forbidden register"});
+    if(r.constraint.fixed&&legal(p,r).empty())return Result<int>::err({Error::Code::Unsatisfiable,"fixed register violates class, operand, or call constraints"});
+  }
+  return Result<int>::ok(0);
+}
+Result<Allocation> linear_scan(const Program& p) {
+  std::vector<const LiveRange*> order;for(auto& r:p.ranges)order.push_back(&r);
+  std::sort(order.begin(),order.end(),[](auto a,auto b){return std::tie(a->begin,a->value)<std::tie(b->begin,b->value);});
+  return assign(p,std::move(order));
+}
+Result<Allocation> greedy(const Program& p) {
+  std::vector<const LiveRange*> order;for(auto& r:p.ranges)order.push_back(&r);
+  auto degree=[&](const LiveRange* r){return std::count_if(p.ranges.begin(),p.ranges.end(),[&](auto& other){return other.value!=r->value&&overlaps(*r,other);});};
+  std::sort(order.begin(),order.end(),[&](auto a,auto b){
+    if(bool(a->constraint.fixed)!=bool(b->constraint.fixed))return bool(a->constraint.fixed);
+    if(a->spillable!=b->spillable)return !a->spillable;
+    auto da=degree(a),db=degree(b);return da!=db?da>db:a->value<b->value;
+  });
+  return assign(p,std::move(order));
+}
+Result<int> verify(const Program& p,const Allocation& a) {
+  auto valid=validate(p);if(!valid)return valid;
+  std::unordered_set<VReg> values,spilled;
+  for(auto& r:p.ranges)values.insert(r.value);
+  for(auto v:a.spilled)if(!values.contains(v)||!spilled.insert(v).second||a.regs.contains(v))return Result<int>::err({Error::Code::Conflict,"invalid spill assignment"});
+  for(auto [v,reg]:a.regs)if(!values.contains(v))return Result<int>::err({Error::Code::Conflict,"assignment references unknown virtual register"});
+  for(auto& r:p.ranges) {
+    if(spilled.contains(r.value)) {
+      if(!r.spillable||r.constraint.fixed)return Result<int>::err({Error::Code::Conflict,"nonspillable value spilled"});
+      continue;
+    }
+    auto it=a.regs.find(r.value);
+    if(it==a.regs.end())return Result<int>::err({Error::Code::Conflict,"unassigned value"});
+    auto allowed=legal(p,r);
+    if(std::find(allowed.begin(),allowed.end(),it->second)==allowed.end())return Result<int>::err({Error::Code::Conflict,"register class, operand, or call-clobber violation"});
+  }
+  for(size_t i=0;i<p.ranges.size();++i)for(size_t j=i+1;j<p.ranges.size();++j) {
+    auto& x=p.ranges[i];auto& y=p.ranges[j];
+    if(overlaps(x,y)&&a.regs.contains(x.value)&&a.regs.contains(y.value)&&aliases(p,a.regs.at(x.value),a.regs.at(y.value)))return Result<int>::err({Error::Code::Conflict,"register interference or aliasing violation"});
+  }
+  return Result<int>::ok(0);
+}
+std::string print(const Program& p) {
+  std::string s="RegTL (inclusive live ranges)\n";
+  auto ranges=p.ranges;std::sort(ranges.begin(),ranges.end(),[](auto& a,auto& b){return a.value<b.value;});
+  for(auto& r:ranges)s+="v"+std::to_string(r.value)+" ["+std::to_string(r.begin)+","+std::to_string(r.end)+"] "+r.klass+"\n";
+  return s;
+}
 }

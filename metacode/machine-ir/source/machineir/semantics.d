@@ -1,7 +1,7 @@
 module machineir.semantics;
 
 import std.array : appender;
-import std.string : strip;
+import std.string : strip, replace;
 
 enum SExprKind { atom, stringLiteral, number, list }
 
@@ -18,21 +18,21 @@ struct SExpr {
     bool isAtom(string s) const { return kind == SExprKind.atom && text == s; }
 
     string toString() const {
-        auto out = appender!string();
-        write(out);
-        return out.data;
+        auto buffer = appender!string();
+        write(buffer);
+        return buffer.data;
     }
 
-    void write(R)(ref R out) const {
+    void write(R)(ref R buffer) const {
         final switch (kind) {
-        case SExprKind.atom: out.put(text); break;
-        case SExprKind.number: out.put(text); break;
+        case SExprKind.atom: buffer.put(text); break;
+        case SExprKind.number: buffer.put(text); break;
         case SExprKind.stringLiteral:
-            out.put(`"`); out.put(text.replace(`\`, `\\`).replace(`"`, `\"`)); out.put(`"`); break;
+            buffer.put(`"`); buffer.put(text.replace(`\`, `\\`).replace(`"`, `\"`)); buffer.put(`"`); break;
         case SExprKind.list:
-            out.put("(");
-            foreach (i, x; children) { if (i) out.put(" "); x.write(out); }
-            out.put(")");
+            buffer.put("(");
+            foreach (i, x; children) { if (i) buffer.put(" "); x.write(buffer); }
+            buffer.put(")");
             break;
         }
     }
@@ -61,11 +61,11 @@ private class SLexer {
             auto b = appender!string();
             while (p < s.length) {
                 c = s[p++];
-                if (c == '"') break;
+                if (c == '"') return STok(STok.Kind.stringLiteral, b.data);
                 if (c == '\\' && p < s.length) b.put(s[p++]);
                 else b.put(c);
             }
-            return STok(STok.Kind.stringLiteral, b.data);
+            throw new SemanticError("unterminated semantic string");
         }
         size_t q = p - 1;
         while (p < s.length && s[p] != '(' && s[p] != ')' &&
@@ -79,14 +79,16 @@ private class SLexer {
 SExpr parseSExpr(string s) {
     auto l = new SLexer(s.strip);
     auto t = l.next();
-    auto parse = function SExpr(STok first) {
+    SExpr delegate(STok,size_t) parse;
+    parse = (STok first,size_t depth) {
+        if(depth>256)throw new SemanticError("semantic nesting limit exceeded");
         if (first.kind == STok.Kind.lparen) {
             SExpr[] xs;
             while (true) {
                 auto x = l.next();
                 if (x.kind == STok.Kind.eof) throw new SemanticError("unterminated semantic expression");
                 if (x.kind == STok.Kind.rparen) break;
-                xs ~= parse(x);
+                xs ~= parse(x,depth+1);
             }
             return SExpr.list(xs);
         }
@@ -97,7 +99,7 @@ SExpr parseSExpr(string s) {
         if (first.kind == STok.Kind.atom) return SExpr.atom(first.text);
         throw new SemanticError("invalid semantic expression");
     };
-    auto x = parse(t);
+    auto x = parse(t,0);
     if (l.next().kind != STok.Kind.eof) throw new SemanticError("trailing semantic expression");
     return x;
 }

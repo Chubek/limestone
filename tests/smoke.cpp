@@ -20,9 +20,9 @@ int main(){
  limeburg::RuleSet rs{{{1,"reg","add", "reg",{"reg","reg"},1,"ADD",0}},{{"reg",1}}};std::vector<limeburg::Node> ns; ns.push_back(limeburg::Node{1,"x","",{},0,false}); // just exercise failure path
  unisel::Program up{{{1,"add",{2,3},{}},{2,"const",{},1},{3,"const",{},2}}};std::vector<unisel::Pattern> ps; ps.push_back(unisel::Pattern{1,"ADD","add","ADD",{"v","v"},1}); ps.push_back(unisel::Pattern{2,"CONST","const","CONST",{},1});auto us=unisel::solve_greedy(up,ps);assert(us); 
  bin2bin::Architecture ba{"toy",{{1,"nop"}}};uint8_t b[]={1};auto dec=bin2bin::decode(ba,b);assert(dec);
- tunah::Session tunah_session; tunah_session.add_rule({"identity",{"x",{},{}},{"x",{},{}}}); auto sat=tunah_session.saturate("x"); assert(!sat && sat.error().code==Error::Code::Unsupported); 
+  tunah::Session tunah_session; tunah_session.add_rule({"identity",{"x",{},{}},{"x",{},{}}}); auto sat=tunah_session.saturate("x"); assert(sat && sat.value().saturated && sat.value().expression=="x");
  auto tr=traceml::compile("(add 1 2)");assert(tr);
  auto*ctx=exl_context_create();exl_context_destroy(ctx);
- auto lm=run_pipeline("hello");assert(lm);
+  auto lm=run_pipeline("(add 1 2)");assert(lm && lm.value().machine_ir.find("#3")!=std::string::npos);
  std::cout<<"Limestone smoke tests passed\n";
 }

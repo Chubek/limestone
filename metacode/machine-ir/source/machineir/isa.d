@@ -51,9 +51,9 @@ struct MachineSpec {
     string arch;
     string family;
     string model;
-    string version;
-    MachineKind kind;
-    ExecutionDomain executionDomain;
+    string isaVersion;
+    MachineKind kind = MachineKind.unknown;
+    ExecutionDomain executionDomain = ExecutionDomain.unknown;
     uint wordSize;
     uint addressSize;
     Endianness endian;
@@ -72,6 +72,7 @@ struct MachineSpec {
     InstructionSpec[string] instructions;
     string[string] aliases;
     ToolingContract[] compilerContracts;
+    ToolingContract[] toolingContracts;
 
     // Retains declarations/fields that MachineIR does not yet normalize.
     Declaration[] raw;

@@ -4,3 +4,7 @@ authors "metacode"
 license "MIT"
 targetType "library"
 sourcePaths "source"
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+}

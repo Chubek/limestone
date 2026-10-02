@@ -40,13 +40,8 @@ Testing/
 *.pdb
 *.ilk
 
-# Generated executables
-/limestone
-/vmweave
-/bin2bin
-/tunah
-/traceml
-/exolayer
+# Generated executables (component names are source directories).
+/limestone-cli
 
 # -----------------------------------------------------------------------------
 # Generated code / intermediate artifacts
@@ -154,6 +149,8 @@ env/
 # D / Dub artifacts (MachineIR)
 # -----------------------------------------------------------------------------
 .dub/
+/metacode/machine-ir/machine-ir-test-library
+/metacode/machine-ir/machine-ir-test-unittest
 docs/
 *.di
 

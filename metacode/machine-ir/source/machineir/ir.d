@@ -141,7 +141,9 @@ class MachineFunction {
         virtualRegisters ~= r; return r;
     }
     void connect(MachineBasicBlock a, MachineBasicBlock b) {
-        a.addSuccessor(b.id); b.predecessors ~= a.id;
+        a.addSuccessor(b.id);
+        foreach(id;b.predecessors)if(id==a.id)return;
+        b.predecessors ~= a.id;
     }
 }
 

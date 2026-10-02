@@ -6,14 +6,17 @@ import std.stdio : writeln;
 import std.string : endsWith, strip, startsWith;
 import machineir;
 
-void main() {
+unittest {
     auto root = "../infobank/isa";
     size_t count;
     foreach (e; dirEntries(root, SpanMode.shallow)) {
         if (!e.name.endsWith(".isa")) continue;
         auto text = cast(string)read(e.name);
         if (text.strip.startsWith("legacy")) continue;
-        auto doc = parseISA(text);
+        IsaDocument doc;
+        try { doc=parseISA(text); } catch(ParseError error) {
+            writeln(e.name, ": byte ", error.offset, ": ", error.msg);throw error;
+        }
         auto spec = buildMachineSpec(doc);
         assert(spec.arch.length, e.name);
         ++count;

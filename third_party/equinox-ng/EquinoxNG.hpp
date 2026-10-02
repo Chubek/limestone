@@ -48,7 +48,7 @@
 #include <variant>
 #include <vector>
 
-#if __has_include("DSLUtils.hpp")
+#if !defined(EQUINOXNG_DISABLE_DSLUTILS) && __has_include("DSLUtils.hpp")
 #  include "DSLUtils.hpp"
 #  define EQUINOXNG_HAS_DSLUTILS 1
 #else
@@ -159,11 +159,11 @@ struct Literal {
 template <>
 struct std::hash<equinoxng::Literal> {
     std::size_t operator()(equinoxng::Literal const& lit) const noexcept {
-        return std::visit([](auto const& v) {
+        return std::visit([&](auto const& v) {
             using T = std::decay_t<decltype(v)>;
             std::size_t seed = 0;
-            detail::hash_combine_inplace(seed, static_cast<std::size_t>(lit.value.index()));
-            detail::hash_combine_inplace(seed, std::hash<T>{}(v));
+            equinoxng::detail::hash_combine_inplace(seed, static_cast<std::size_t>(lit.value.index()));
+            equinoxng::detail::hash_combine_inplace(seed, std::hash<T>{}(v));
             return seed;
         }, lit.value);
     }
@@ -264,14 +264,14 @@ struct std::hash<equinoxng::ENode> {
     std::size_t operator()(equinoxng::ENode const& n) const noexcept {
         std::size_t seed = 0;
         if (n.is_symbol()) {
-            detail::hash_combine_inplace(seed, 1u);
-            detail::hash_combine_inplace(seed, n.symbol());
+            equinoxng::detail::hash_combine_inplace(seed, 1u);
+            equinoxng::detail::hash_combine_inplace(seed, n.symbol());
         } else {
-            detail::hash_combine_inplace(seed, 2u);
-            detail::hash_combine_inplace(seed, n.literal());
+            equinoxng::detail::hash_combine_inplace(seed, 2u);
+            equinoxng::detail::hash_combine_inplace(seed, n.literal());
         }
         for (auto const& c : n.children) {
-            detail::hash_combine_inplace(seed, c.value);
+            equinoxng::detail::hash_combine_inplace(seed, c.value);
         }
         return seed;
     }
@@ -1021,10 +1021,10 @@ inline std::vector<RewriteRule> arithmetic_ring_basic() {
         rule("mul-comm",  mul(x, y), mul(y, x)),
         rule("mul-assoc", mul(mul(x, y), z), mul(x, mul(y, z))),
         rule("distrib",   mul(x, add(y, z)), add(mul(x, y), mul(x, z))),
-        rule("add-zero",  add(x, lit(0)), x),
-        rule("mul-one",   mul(x, lit(1)), x),
-        rule("mul-zero",  mul(x, lit(0)), lit(0)),
-        rule("sub-self",  sub(x, x), lit(0)),
+        rule("add-zero",  add(x, lit(std::int64_t{0})), x),
+        rule("mul-one",   mul(x, lit(std::int64_t{1})), x),
+        rule("mul-zero",  mul(x, lit(std::int64_t{0})), lit(std::int64_t{0})),
+        rule("sub-self",  sub(x, x), lit(std::int64_t{0})),
         rule("double-neg", neg(neg(x)), x)
     };
 }

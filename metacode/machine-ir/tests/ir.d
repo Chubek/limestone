@@ -3,7 +3,7 @@ module ir;
 import std.stdio : writeln;
 import machineir;
 
-void main() {
+unittest {
     auto e = parseSExpr("(set rd (add rs1 rs2))");
     assert(e.toString() == "(set rd (add rs1 rs2))");
 

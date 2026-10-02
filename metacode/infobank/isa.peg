@@ -1,5 +1,5 @@
 Document <- WS Top* WS EOF
-Top <- Arch / Profile / Compiler / Regclass / Encoding / Op / Tooling / Legacy
+Top <- Arch / Profile / Compiler / Regclass / Alias / Encoding / Op / Tooling / Legacy
 
 Arch <- KW("arch") WS Ident WS "{" WS Field* WS "}"
 Profile <- KW("profile") WS "{" WS Field* WS "}"
@@ -12,11 +12,13 @@ Regclass <- KW("regclass") WS Ident WS "{" WS RegisterEntry* WS "}"
 RegisterEntry <- Ident WS "(" Number ")" WS "=" WS Number WS ","
 
 Encoding <- KW("encoding") WS Ident WS "{" WS Field* WS "}"
+Alias <- KW("alias") WS Ident WS "=" WS Value WS ";"
 Op <- KW("op") WS Ident WS "{" WS OpField* WS "}"
 OpField <- SemanticsField / Field
 SemanticsField <- KW("semantics") WS "=" WS Semantic WS ";"
 
-Field <- Ident WS "=" WS Value WS ";"
+Field <- FieldName WS ("=" WS Object WS ";"? / "=" WS Value WS ";" / "{" WS Field* WS "}" WS ";"?)
+FieldName <- Ident (WS "[" WS Number WS ":" WS Number WS "]")?
 
 Value <- String
        / Number
