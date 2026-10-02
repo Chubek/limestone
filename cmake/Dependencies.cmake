@@ -40,18 +40,40 @@ foreach(target IN ITEMS limestone_dparse limestone_mkdparse)
 endforeach()
 add_executable(limestone-make-dparser ${dparser_dir}/make_dparser.c)
 target_link_libraries(limestone-make-dparser PRIVATE limestone_mkdparse limestone_dparse)
+find_package(Perl REQUIRED)
 function(limestone_grammar name)
-  set(output ${PROJECT_BINARY_DIR}/generated/${name}.c)
+  string(REPLACE "-" "_" identifier ${name})
+  set(directory ${PROJECT_BINARY_DIR}/generated/parsers)
+  set(output ${directory}/${name}.c)
+  set(header ${directory}/${name}_ast.hpp)
+  set(source ${directory}/${name}_ast.cpp)
   add_custom_command(OUTPUT ${output}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${directory}
     COMMAND limestone-make-dparser ${PROJECT_SOURCE_DIR}/parsers/${name}.g
-      -o ${output} -i ${name}
+      -o ${output} -i ${identifier}
     DEPENDS limestone-make-dparser ${PROJECT_SOURCE_DIR}/parsers/${name}.g
     VERBATIM)
-  set(${name}_parser ${output} PARENT_SCOPE)
+  add_custom_command(OUTPUT ${header} ${source}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${directory}
+    COMMAND ${PERL_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/syngen.pl
+      --grammar ${PROJECT_SOURCE_DIR}/parsers/${name}.g
+      --header ${header} --source ${source} ${PROJECT_SOURCE_DIR}/parsers/${name}.absyn
+    COMMAND ${CMAKE_COMMAND} -E touch ${header} ${source}
+    DEPENDS ${PROJECT_SOURCE_DIR}/scripts/syngen.pl
+      ${PROJECT_SOURCE_DIR}/parsers/${name}.g ${PROJECT_SOURCE_DIR}/parsers/${name}.absyn
+    VERBATIM)
+  set(limestone_parser_sources ${limestone_parser_sources} ${output} PARENT_SCOPE)
+  set(limestone_ast_sources ${limestone_ast_sources} ${source} PARENT_SCOPE)
+  set(limestone_ast_headers ${limestone_ast_headers} ${header} PARENT_SCOPE)
 endfunction()
-limestone_grammar(isa)
-limestone_grammar(traceml)
+foreach(grammar IN ITEMS bin2bin isa limeburg limestone machine-ir regtl schedrow traceml tuner unisel)
+  limestone_grammar(${grammar})
+endforeach()
+add_custom_target(limestone-generate-parsers
+  DEPENDS ${limestone_parser_sources} ${limestone_ast_sources} ${limestone_ast_headers})
+add_library(limestone_parser_tables STATIC ${limestone_parser_sources})
+add_dependencies(limestone_parser_tables limestone-generate-parsers)
+target_link_libraries(limestone_parser_tables PRIVATE limestone_dparse)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/exolangtk
   ${PROJECT_BINARY_DIR}/vendor/exolangtk EXCLUDE_FROM_ALL)

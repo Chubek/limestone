@@ -17,14 +17,14 @@
 ;                named by the operator itself: sext32to64 sign extends, zext32to64
 ;                zero extends, and the trunc operators keep the low bits. A
 ;                truncation of a widening is the identity when the widening was
-;                exact, and a widening of a truncation is the same widening
-;                applied to the value, which is what the rules below state.
-;                Distributing a widening is sound only for sign extension: a
-;                zero extension of a sum is not the sum of the zero extensions,
-;                because the carry out of the narrow add is dropped by the
-;                widening but kept by the wide add. That asymmetry is why the
-;                distribution rules below are stated for sext only, and it is
-;                the reason the file cannot be extended to zext by analogy.
+;                exact. Conversion compositions must agree on their intermediate
+;                widths; applying sext32to64 twice is ill-typed, not idempotent.
+;                Sign extension distributes over bitwise and/or unconditionally.
+;                Arithmetic distribution additionally requires proof that the
+;                narrow signed operation does not overflow. Sign extension of a
+;                wrapped result otherwise differs from the wide computation.
+;                The signed-*-fits32 predicates are supplied by a host analysis;
+;                loading this file without that analysis is an error.
 ; Cost model    : The collapse rules are cost reducing. The distribution rules
 ;                grow the term, which is deliberate: they are the only way a
 ;                saturated e-graph can reach the wide form of a narrow
@@ -40,31 +40,31 @@
 ;                and are closed.
 ;
 ; Operator signatures required by this file:
-; signatures: sext8to32 1, zext8to32 1, sext32to64 1, zext32to64 1,
+; signatures: sext8to32 1, zext8to32 1, sext8to64 1, zext8to64 1,
+;             sext32to64 1, zext32to64 1,
 ;             trunc32to8 1, trunc64to32 1, ite 3, sel 3, copy 1, iadd 2,
 ;             isub 2, imul 2, iand 2, ior 2, ineg 1
 ; =============================================================================
 
 ; A truncation undoes an exact widening, so the pair is the original value.
 (rule ic-trunc-of-sext (trunc64to32 (sext32to64 ?x)) ?x)
-; Truncating a zero extension yields the zero extended value itself, because
-; the low half of a zero extended narrow value is the value.
-(rule ic-trunc-of-zext (trunc64to32 (zext32to64 ?x)) (zext32to64 ?x))
-; Widening a truncation is a widening of the value, whichever widening it is.
-(rule ic-sext-of-trunc (sext32to64 (trunc64to32 ?x)) (sext32to64 ?x))
-; The other order: a widening of a truncation is a widening.
-(rule ic-zext-of-trunc (zext32to64 (trunc64to32 ?x)) (zext32to64 ?x))
-; Truncating twice to the same width is one truncation.
-(rule ic-trunc-of-trunc (trunc64to32 (trunc64to32 ?x)) (trunc64to32 ?x))
-; Widening an already wide value by the same amount changes nothing, so one
-; widening suffices.
-(rule ic-sext-of-sext (sext32to64 (sext32to64 ?x)) (sext32to64 ?x))
-; Same, for the zero widening.
-(rule ic-zext-of-zext (zext32to64 (zext32to64 ?x)) (zext32to64 ?x))
-; Same, for the narrow widening.
-(rule ic-sext8-of-sext8 (sext8to32 (sext8to32 ?x)) (sext8to32 ?x))
-; Same, for the narrow zero widening.
-(rule ic-zext8-of-zext8 (zext8to32 (zext8to32 ?x)) (zext8to32 ?x))
+; Truncation also undoes a zero extension, returning the original 32-bit value.
+(rule ic-trunc-of-zext (trunc64to32 (zext32to64 ?x)) ?x)
+; Two exact, width-compatible sign extensions compose to one sign extension.
+(rule ic-compose-sext (sext32to64 (sext8to32 ?x)) (sext8to64 ?x))
+; Two exact zero extensions compose in the same way.
+(rule ic-compose-zext (zext32to64 (zext8to32 ?x)) (zext8to64 ?x))
+; An 8-bit zero extension is non-negative in 32 bits, so subsequent sign
+; extension is the same as zero extension directly to 64 bits.
+(rule ic-compose-zext-sext (sext32to64 (zext8to32 ?x)) (zext8to64 ?x))
+; Keeping the low 32 bits of an 8-to-64 sign extension gives an 8-to-32 one.
+(rule ic-trunc-wide-sext8 (trunc64to32 (sext8to64 ?x)) (sext8to32 ?x))
+; The same composition for zero extension.
+(rule ic-trunc-wide-zext8 (trunc64to32 (zext8to64 ?x)) (zext8to32 ?x))
+; Truncating to the original 8-bit width undoes an exact sign extension.
+(rule ic-trunc8-of-sext (trunc32to8 (sext8to32 ?x)) ?x)
+; The same identity for zero extension.
+(rule ic-trunc8-of-zext (trunc32to8 (zext8to32 ?x)) ?x)
 ; A copy has no width of its own, so a conversion applied to a copy is a
 ; conversion applied to the copied value.
 (rule ic-sext-of-copy (sext32to64 (copy ?x)) (sext32to64 ?x))
@@ -77,22 +77,23 @@
 (rule ic-ite-to-sel (ite ?c ?a ?b) (sel ?a ?b ?c))
 ; The same identity in the other spelling, so either form can be matched.
 (rule ic-sel-to-ite (sel ?a ?b ?c) (ite ?c ?a ?b))
-; Sign extension distributes over an exact integer operation, so the wide form
-; of a 32 bit computation is the wide operation of the 32 bit operands. This
-; is the climbing step: it is the only way the saturated e-graph can hold the
-; 64 bit spelling of a narrow computation, and the rules of the wide forms
-; apply to it.
-(rule ic-sext-of-add (sext32to64 (iadd ?x ?y)) (iadd (sext32to64 ?x) (sext32to64 ?y)))
-; Subtraction distributes the same way.
-(rule ic-sext-of-sub (sext32to64 (isub ?x ?y)) (isub (sext32to64 ?x) (sext32to64 ?y)))
-; Multiplication distributes the same way.
-(rule ic-sext-of-mul (sext32to64 (imul ?x ?y)) (imul (sext32to64 ?x) (sext32to64 ?y)))
+; Signed addition commutes with sign extension only when the exact sum fits
+; the narrow signed range. For example, INT32_MAX + 1 must not be distributed.
+(rule ic-sext-of-add (sext32to64 (iadd ?x ?y)) (iadd (sext32to64 ?x) (sext32to64 ?y))
+  :where (signed-add-fits32 ?x ?y))
+; The same proof obligation for the exact signed difference.
+(rule ic-sext-of-sub (sext32to64 (isub ?x ?y)) (isub (sext32to64 ?x) (sext32to64 ?y))
+  :where (signed-sub-fits32 ?x ?y))
+; The exact signed product must fit before distributing sign extension.
+(rule ic-sext-of-mul (sext32to64 (imul ?x ?y)) (imul (sext32to64 ?x) (sext32to64 ?y))
+  :where (signed-mul-fits32 ?x ?y))
 ; Bitwise and distributes the same way, bit by bit.
 (rule ic-sext-of-and (sext32to64 (iand ?x ?y)) (iand (sext32to64 ?x) (sext32to64 ?y)))
 ; Bitwise or distributes the same way.
 (rule ic-sext-of-or (sext32to64 (ior ?x ?y)) (ior (sext32to64 ?x) (sext32to64 ?y)))
-; Negation commutes with sign extension.
-(rule ic-sext-of-neg (sext32to64 (ineg ?x)) (ineg (sext32to64 ?x)))
+; Negation commutes only when the operand is not INT32_MIN.
+(rule ic-sext-of-neg (sext32to64 (ineg ?x)) (ineg (sext32to64 ?x))
+  :where (signed-neg-fits32 ?x))
 ; The zero extension case is deliberately absent. For x and y in the narrow
 ; width, zext(x + y mod 2^32) is not zext(x) + zext(y), because the carry out
 ; of the narrow addition is discarded by the widening and kept by the wide one.

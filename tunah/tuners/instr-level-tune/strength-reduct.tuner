@@ -11,11 +11,12 @@
 ;                from the shared directory vocabulary.
 ; Preconditions :
 ;   * Wrapping two's complement arithmetic, so every identity below holds for
-;     any element width W without a range assumption on the operand. This is
+;     the checked element widths W of 8, 16, 32 and 64 bits without a range
+;     assumption on the operand. This is
 ;     why sdiv by minus one may be rewritten to a negation: the wrapped result
 ;     of the most negative value divided by minus one is that value negated,
 ;     which is what the wrapping model already requires of the divide.
-;   * Shift counts are reduced modulo W on every supported target, and a shift
+;   * The IL adapter certifies modulo-W shift counts, and a shift
 ;     by a reduced count is a shift by the written count whenever that count
 ;     is less than W, which is true of every count in this file.
 ;   * udiv and urem are unsigned, so a power of two divisor becomes a logical
@@ -34,9 +35,9 @@
 ; Termination   : No rule increases the number of operands of an operator and
 ;                no rule duplicates an operand, so each rule is non growing.
 ;                The rewrites form a small lattice: mul by two, shift by one
-;                and add of a value to itself all normalise onto the same two
-;                shapes, and the extractor's tie between them is broken by
-;                rule order, which is deterministic.
+;                and add of a value to itself expose equivalent alternatives.
+;                Equal-cost extraction follows stable e-node insertion order;
+;                target costs decide which shape is preferred.
 ;
 ; Operator signatures required by this file:
 ; signatures: imul 2, iadd 2, ishl 2, ishr 2, iand 2, ineg 1, sdiv 2, srem 2,

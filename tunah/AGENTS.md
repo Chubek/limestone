@@ -155,6 +155,30 @@ Optimization patterns and analysis hooks across Limestone stages are declared in
 - **Type Compatibility**: Types inferred or annotated on pattern variables must match operator operand requirements.
 - **Malformed Specification Handling**: Malformed or unresolvable S-expression patterns must fail validation at compile/initialization time with precise line, column, and diagnostic messages. Silent discards are prohibited.
 
+### 6.3 Implemented Generic Term/Rule API
+
+The current public API is in `tunah.hpp`; usage and implementation limits are
+documented in `README.md`. `Session::load_rules` accepts a source name, and
+`load_rules_file` loads a bounded rule specification transactionally. Specifications
+may declare `(operator name arity)`. Native EkippX `@define`/`@deflit` macros are
+isolated per load; SExprTk events populate source-located DSLtk AST nodes.
+
+`define_predicate(name, arity, callback)` registers host analysis predicates for
+`:where (predicate ?variable literal ...)` and conjunctions. Missing predicates,
+unbound arguments, and incompatible arities are compile-time errors. Predicates
+inspect equivalent structured representatives and must return true only for
+proved preconditions; false means unknown or inapplicable. Arithmetic sign-extension
+distribution in the bundled scalar/vector tuners requires an overflow proof.
+
+`parse_term`/`format_term` and structured `Session::saturate` provide a generic
+term boundary. `CostModel` configures local non-negative literal/operator costs;
+Equinox-NG still owns extraction. Checked additive costs prevent overflow from
+creating falsely cheap terms. Prepared native patterns are immutable and private,
+and saturation contexts remain isolated. `Limits::trace` controls admitted-match
+traces with rule locations. Expanded-stream locations are explicitly marked when
+EkippX changes the input. Concrete IL type/effect verification and reconstruction
+remain responsibilities of the respective IL adapters.
+
 ---
 
 ## 7. IL Adapter Contract, Lifecycle, Normalization, Legality, and Diagnostics
@@ -313,4 +337,3 @@ Before submitting changes to the Tunah subsystem, verify:
 - [ ] Execution and extraction are completely deterministic across multiple consecutive runs.
 - [ ] CMake target boundaries are respected without introducing undeclared dependencies.
 - [ ] Full test matrix (unit, adapter, saturation, diagnostics, reproducibility) passes cleanly.
-

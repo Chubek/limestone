@@ -1,121 +1,155 @@
-#include "tunah.hpp"
+#include "detail.hpp"
 #include <EquinoxNG.hpp>
-#include <SExprTk.hpp>
-#include <EkippX.hpp>
-#include <charconv>
 #include <chrono>
 #include <limits>
 #include <map>
-#include <set>
+
+namespace limestone::tunah::detail {
+// Equinox-NG accepts a host-defined cost type. Saturating arithmetic prevents
+// its additive extractor from wrapping a large cost into a cheap alternative.
+struct CheckedCost {
+  size_t value=0;
+  explicit constexpr operator size_t() const { return value; }
+  constexpr bool operator==(const CheckedCost&) const = default;
+  constexpr bool operator<(const CheckedCost& other) const { return value<other.value; }
+  CheckedCost& operator+=(CheckedCost other) {
+    const auto maximum=std::numeric_limits<size_t>::max();
+    value=other.value>maximum-value?maximum:value+other.value;
+    return *this;
+  }
+};
+}
+template<> struct std::numeric_limits<limestone::tunah::detail::CheckedCost> : std::numeric_limits<size_t> {
+  static constexpr limestone::tunah::detail::CheckedCost max() noexcept { return {std::numeric_limits<size_t>::max()}; }
+};
 
 namespace limestone::tunah {
 namespace {
 using ETerm=equinoxng::Term;
-// Check lexical failure cases that SExprTk's permissive data parser accepts.
-void lexical_check(std::string_view text) {
-  bool quoted=false,escape=false,comment=false;size_t depth=0;
-  for(char c:text) {
-    if(comment){if(c=='\n')comment=false;continue;}
-    if(quoted){if(escape)escape=false;else if(c=='\\')escape=true;else if(c=='"')quoted=false;continue;}
-    if(c==';'){comment=true;continue;}
-    if(c=='"'){quoted=true;continue;}
-    if(c=='('&&++depth>256)throw Error{Error::Code::ResourceLimit,"S-expression nesting limit exceeded"};
-    if(c==')'){if(!depth)throw Error{Error::Code::Parse,"unexpected ')'"};--depth;}
+ETerm convert(const Term& term) {
+  if(term.constant) return ETerm::lit(equinoxng::Literal(*term.constant));
+  if(term.op.front()=='?') return ETerm::var(term.op.substr(1));
+  std::vector<ETerm> children;
+  children.reserve(term.arguments.size());
+  for(const auto& child:term.arguments) children.push_back(convert(child));
+  return ETerm::op(term.op,std::move(children));
+}
+Term reconstruct(const ETerm& term) {
+  Term result;
+  if(term.is_lit()) result.constant=std::get<int64_t>(term.as_lit().value);
+  else if(term.is_var()) result.op="?"+term.as_var().name;
+  else {
+    result.op=term.as_node().op.name;
+    result.application=!term.as_node().children.empty();
+    result.arguments.reserve(term.as_node().children.size());
+    for(const auto& child:term.as_node().children) result.arguments.push_back(reconstruct(child));
   }
-  if(quoted||depth)throw Error{Error::Code::Parse,"unterminated S-expression or string"};
+  return result;
 }
-sexprtk::Cartable parse(std::string_view text) {
-  lexical_check(text);
-  auto parsed=sexprtk::SExprTk{}.parse(sexprtk::Source::from_string(std::string(text),"<tunah>"));
-  if(!parsed.ok())throw Error{Error::Code::Parse,parsed.errors.front()};
-  return parsed;
+size_t size(const ETerm& term) {
+  size_t count=1;
+  if(term.is_node()) for(const auto& child:term.as_node().children) count+=size(child);
+  return count;
 }
-Term term(const sexprtk::Cell& c) {
-  if(!c.tail.empty())throw Error{Error::Code::Unsupported,"quoted rewrite terms are unsupported"};
-  const auto& atom=c.head;
-  if(atom.is_int())return {"",{},atom.as_int()};
-  if(atom.is_symbol()) {
-    auto name=atom.as_string();
-    if(!name.empty()&&(std::isdigit(static_cast<unsigned char>(name.front()))||name.front()=='-')) {
-      int64_t n=0;auto [p,e]=std::from_chars(name.data(),name.data()+name.size(),n);
-      if(e!=std::errc{}||p!=name.data()+name.size())throw Error{Error::Code::Parse,"invalid integer atom: "+name};
-    }
-    return {name,{},{}};
+struct ExtractionCost {
+  using cost_type=detail::CheckedCost;
+  const CostModel& model;
+  cost_type literal_cost(const equinoxng::Literal&) const { return {model.literal}; }
+  cost_type symbol_cost(const equinoxng::Symbol& symbol, size_t arity) const {
+    auto cost=model.operators.find(symbol.name);
+    return {cost==model.operators.end()?1+arity:cost->second};
   }
-  if(atom.is_list()) {
-    const auto& list=atom.as_list();
-    if(list.empty()||!list.front().head.is_symbol())throw Error{Error::Code::Parse,"term requires an operator symbol"};
-    Term t{list.front().head.as_string(),{},{}};
-    for(size_t i=1;i<list.size();++i)t.arguments.push_back(term(list[i]));
-    return t;
+};
+}
+struct Session::PreparedRules {
+  struct Rule { size_t index; ETerm lhs, rhs; size_t growth; std::string trace_name; };
+  std::vector<Rule> rules;
+};
+std::shared_ptr<const Session::PreparedRules> Session::prepare_rules(const std::vector<RewriteRule>& rules,
+  const std::unordered_map<std::string,size_t>& operators) const {
+  auto prepared=std::make_shared<PreparedRules>();
+  std::set<std::string> names;
+  for(size_t index=0;index<rules.size();++index) {
+    const auto& rule=rules[index];
+    if(!names.insert(rule.name).second) throw detail::diagnostic(Error::Code::InvalidArgument,"duplicate rule name: "+rule.name,rule.location);
+    validate_rule(rule,operators);
+    auto lhs=convert(rule.lhs),rhs=convert(rule.rhs);
+    auto growth=size(lhs)+size(rhs);
+    auto trace_name=rule.name;
+    if(!rule.location.file.empty()&&rule.location.file!="<tunah>")
+      trace_name+=" @"+rule.location.file+(rule.location.expanded?" [expanded]":"")+":"+std::to_string(rule.location.line)+":"+std::to_string(rule.location.column);
+    prepared->rules.push_back({index,std::move(lhs),std::move(rhs),growth,std::move(trace_name)});
   }
-  throw Error{Error::Code::Unsupported,"Tunah term adapter supports integers and symbols"};
+  std::sort(prepared->rules.begin(),prepared->rules.end(),[&](const auto& a,const auto& b){return rules[a.index].name<rules[b.index].name;});
+  return prepared;
 }
-ETerm convert(const Term& t,const std::unordered_map<std::string,size_t>& operators,bool pattern,std::set<std::string>& variables) {
-  if(!t.children.empty())throw Error{Error::Code::Unsupported,"flat term IDs require an IL adapter; use structured arguments"};
-  if(t.constant) {
-    if(!t.arguments.empty())throw Error{Error::Code::InvalidArgument,"constant has child terms"};
-    return ETerm::lit(equinoxng::Literal(*t.constant));
-  }
-  if(t.op.empty())throw Error{Error::Code::InvalidArgument,"empty term operator"};
-  if(t.op.front()=='?') {
-    if(!pattern||t.op.size()==1||!t.arguments.empty())throw Error{Error::Code::InvalidArgument,"invalid pattern variable"};
-    auto name=t.op.substr(1);variables.insert(name);return ETerm::var(name);
-  }
-  auto signature=operators.find(t.op);
-  if((signature==operators.end()&&!t.arguments.empty())||(signature!=operators.end()&&signature->second!=t.arguments.size()))throw Error{Error::Code::InvalidArgument,"unknown operator or wrong arity: "+t.op};
-  std::vector<ETerm> children;for(auto& c:t.arguments)children.push_back(convert(c,operators,pattern,variables));
-  return ETerm::op(t.op,std::move(children));
+Result<SaturationResult> Session::saturate(std::string_view root, Limits limits, const CostModel& costs) const {
+  auto parsed=parse_term(root);
+  if(!parsed) return Result<SaturationResult>::err(parsed.error());
+  return saturate(parsed.value(),std::move(limits),costs);
 }
-size_t size(const ETerm& t) { size_t n=1;if(t.is_node())for(auto& c:t.as_node().children)n+=size(c);return n; }
-std::string render(const ETerm& t) {
-  if(t.is_lit())return equinoxng::literal_to_string(t.as_lit());
-  if(t.is_var())return "?"+t.as_var().name;
-  const auto& n=t.as_node();if(n.children.empty())return n.op.name;
-  std::string s="("+n.op.name;for(auto& c:n.children)s+=" "+render(c);return s+")";
-}
-}
-Result<int> Session::load_rules(std::string_view specification) {
+Result<SaturationResult> Session::saturate(const Term& root, Limits limits, const CostModel& costs) const {
   try {
-    ekippx::Context preprocessor;auto text=preprocessor.expand_text(specification,"<tunah>");
-    auto parsed=parse(text);std::vector<RewriteRule> compiled;
-    std::set<std::string> names;for(auto& r:rules_)names.insert(r.name);
-    for(auto& c:parsed.root.cells) {
-      if(!c.head.is_list())throw Error{Error::Code::Parse,"expected (rule name pattern replacement)"};
-      const auto& list=c.head.as_list();
-      if(list.size()!=4||!list[0].head.is_symbol()||list[0].head.as_string()!="rule"||!list[1].head.is_symbol())throw Error{Error::Code::Parse,"expected (rule name pattern replacement); rule clauses need an explicit analysis adapter"};
-      RewriteRule rule{list[1].head.as_string(),term(list[2]),term(list[3])};
-      if(!names.insert(rule.name).second)throw Error{Error::Code::Conflict,"duplicate rewrite rule: "+rule.name};
-      std::set<std::string> lhs,rhs;convert(rule.lhs,operators_,true,lhs);convert(rule.rhs,operators_,true,rhs);
-      for(auto& v:rhs)if(!lhs.contains(v))throw Error{Error::Code::InvalidArgument,"unbound replacement variable: ?"+v};
-      compiled.push_back(std::move(rule));
+    std::set<std::string> variables;
+    detail::validate_term(root,operators_,false,variables);
+    if(costs.literal==std::numeric_limits<size_t>::max()) throw Error{Error::Code::InvalidArgument,"literal cost is reserved for infinity"};
+    std::map<std::string,size_t> ordered_costs(costs.operators.begin(),costs.operators.end());
+    for(const auto& [op,cost]:ordered_costs) {
+      if(!operators_.contains(op)) throw Error{Error::Code::InvalidArgument,"cost for undeclared operator: "+op};
+      if(cost==std::numeric_limits<size_t>::max()) throw Error{Error::Code::InvalidArgument,"operator cost is reserved for infinity: "+op};
     }
-    const auto count=compiled.size();rules_.insert(rules_.end(),compiled.begin(),compiled.end());return Result<int>::ok(static_cast<int>(count));
-  }catch(const Error& e){return Result<int>::err(e);}catch(const std::exception& e){return Result<int>::err({Error::Code::Parse,e.what()});}
-}
-Result<SaturationResult> Session::saturate(std::string_view root,Limits limits) const {
-  try {
-    auto parsed=parse(root);
-    if(parsed.root.size()!=1)throw Error{Error::Code::Parse,"expected exactly one input term"};
-    std::set<std::string> variables;auto input=convert(term(parsed.root.front()),operators_,false,variables);
-    if(!limits.nodes||!limits.classes||size(input)>limits.nodes||size(input)>limits.classes)throw Error{Error::Code::ResourceLimit,"input exceeds e-graph budget"};
+    auto input=convert(root);
+    const auto input_size=size(input);
+    if(!limits.nodes||!limits.classes||input_size>limits.nodes||input_size>limits.classes)throw Error{Error::Code::ResourceLimit,"input exceeds e-graph budget"};
     equinoxng::EGraph graph;auto handle=graph.add(input);SaturationResult result;
     const auto start=std::chrono::steady_clock::now();
     auto stopped=[&]{
-      return (limits.cancelled&&limits.cancelled())||(limits.time_ms&&std::chrono::steady_clock::now()-start>=std::chrono::milliseconds(limits.time_ms));
+      return (limits.cancelled&&limits.cancelled())||(limits.time_ms&&
+        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count())>=limits.time_ms);
     };
-    auto rules=rules_;std::sort(rules.begin(),rules.end(),[](auto& a,auto& b){return a.name<b.name;});
-    std::set<std::string> names;std::vector<equinoxng::RewriteRule> compiled;
-    for(auto& r:rules) {
-      if(r.name.empty()||!names.insert(r.name).second)throw Error{Error::Code::InvalidArgument,"empty or duplicate rule name"};
-      std::set<std::string> lhs_vars,rhs_vars;auto lhs=convert(r.lhs,operators_,true,lhs_vars),rhs=convert(r.rhs,operators_,true,rhs_vars);
-      for(auto& v:rhs_vars)if(!lhs_vars.contains(v))throw Error{Error::Code::InvalidArgument,"unbound replacement variable: ?"+v};
-      const size_t growth=size(rhs);const auto name=r.name;
-      compiled.emplace_back(name,std::move(lhs),std::move(rhs),[&,growth,name](const equinoxng::Subst& bindings){
-        if(stopped()||graph.num_enodes()+growth>limits.nodes||graph.num_classes()+growth>limits.classes){result.limit_reached=true;return false;}
-        std::map<std::string,uint32_t> sorted;for(auto&[key,id]:bindings)sorted[key]=graph.find(id).value;
-        std::string step=name;for(auto&[key,id]:sorted)step+=" ?"+key+"="+std::to_string(id);
-        result.trace.push_back(std::move(step));return true;
+    auto prepared=prepared_?prepared_:prepare_rules(rules_,operators_);
+    std::vector<equinoxng::RewriteRule> compiled;
+    compiled.reserve(prepared->rules.size());
+    const CostModel analysis_costs;
+    for(const auto& pattern:prepared->rules) {
+      const auto* origin=&rules_[pattern.index];
+      const auto* trace_name=&pattern.trace_name;
+      const size_t growth=pattern.growth;
+      compiled.emplace_back(origin->name,pattern.lhs,pattern.rhs,[&,growth,origin,trace_name](const equinoxng::Subst& bindings){
+        const auto& rule=*origin;
+        if(stopped()) { result.limit_reached=true; return false; }
+        std::map<std::string,Term> representatives;
+        for(const auto& condition:rule.conditions) {
+          std::vector<Term> arguments;
+          for(const auto& argument:condition.arguments) {
+            if(argument.constant) { arguments.push_back(argument); continue; }
+            auto variable=argument.op.substr(1);
+            auto found=representatives.find(variable);
+            if(found==representatives.end()) {
+              auto extracted=graph.extract(bindings.at(variable),ExtractionCost{analysis_costs});
+              if(extracted.cost==std::numeric_limits<size_t>::max()) throw Error{Error::Code::Internal,"predicate binding extraction failed"};
+              found=representatives.emplace(variable,reconstruct(extracted.term)).first;
+            }
+            arguments.push_back(found->second);
+          }
+          auto allowed=predicates_.at(condition.predicate).evaluate(arguments);
+          if(!allowed) throw detail::diagnostic(allowed.error().code,"predicate "+condition.predicate+": "+allowed.error().message,rule.location);
+          if(!allowed.value()) return false;
+        }
+        // A conservative reservation covers both sides instantiated by the
+        // vendor engine. Subtraction avoids overflow in the budget check.
+        if(stopped()||graph.num_enodes()>limits.nodes||growth>limits.nodes-graph.num_enodes()||
+           graph.num_classes()>limits.classes||growth>limits.classes-graph.num_classes()) {
+          result.limit_reached=true; return false;
+        }
+        if(limits.trace) {
+          std::map<std::string,uint32_t> sorted;
+          for(const auto& [key,id]:bindings) sorted[key]=graph.find(id).value;
+          std::string step=*trace_name;
+          for(const auto& [key,id]:sorted) step+=" ?"+key+"="+std::to_string(id);
+          result.trace.push_back(std::move(step));
+        }
+        return true;
       });
     }
     for(size_t iteration=0;iteration<limits.iterations;++iteration) {
@@ -127,9 +161,10 @@ Result<SaturationResult> Session::saturate(std::string_view root,Limits limits) 
       if(!applied&&before==graph.num_enodes()){result.saturated=true;break;}
     }
     if(!result.saturated&&result.iterations==limits.iterations)result.limit_reached=true;
-    graph.rebuild();auto extracted=graph.extract(handle);
-    if(extracted.cost==std::numeric_limits<size_t>::max())throw Error{Error::Code::Internal,"e-graph extraction failed"};
-    result.expression=render(extracted.term);result.cost=extracted.cost;result.nodes=graph.num_enodes();
+    graph.rebuild();auto extracted=graph.extract(handle,ExtractionCost{costs});
+    if(extracted.cost==std::numeric_limits<size_t>::max())throw Error{Error::Code::ResourceLimit,"extraction cost exceeds the representable range"};
+    result.term=reconstruct(extracted.term); result.term.location=root.location;
+    result.expression=format_term(result.term);result.cost=extracted.cost;result.nodes=graph.num_enodes();result.classes=graph.num_classes();
     return Result<SaturationResult>::ok(std::move(result));
   }catch(const Error& e){return Result<SaturationResult>::err(e);}catch(const std::exception& e){return Result<SaturationResult>::err({Error::Code::Internal,e.what()});}
 }

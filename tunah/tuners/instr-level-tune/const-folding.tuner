@@ -11,7 +11,7 @@
 ; Soundness     : Each rule states a total identity of the integer model
 ;                declared below. Because the two sides contain no variables,
 ;                soundness is decidable by evaluation alone, and the harness
-;                in tests/tunah re-derives every right hand side with a
+;                in tests/tunah_tuners.cpp re-derives every right hand side with a
 ;                reference evaluator.
 ; Cost model    : A literal costs 1 and an application costs 1 + arity, so a
 ;                folded literal is always the cheapest representative of its
@@ -23,8 +23,9 @@
 ;
 ; Semantic model shared by every tuner file in this directory:
 ;   * Integers are two's complement with wrapping arithmetic, so the rules are
-;     width independent and hold for any element width W.
-;   * Shift counts are reduced modulo W, as on every target Tunah supports.
+;     checked at element widths W of 8, 16, 32 and 64 bits by the corpus harness.
+;   * Shift counts are reduced modulo W. The IL adapter must establish this
+;     model explicitly; it is not inferred as a property of every target ISA.
 ;   * Literals are written in decimal, negatives included.
 ;   * A literal inside an av- pattern denotes a broadcast lane.
 ;   * (ite c a b) yields a when c is non-zero and b otherwise.

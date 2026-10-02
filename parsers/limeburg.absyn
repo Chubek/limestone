@@ -1,0 +1,30 @@
+namespace limestone::syntax::limeburg;
+parser limeburg;
+root Document;
+node Document { Declaration* declarations; }
+sum Declaration = RuleSet | Nonterminal | Terminal | Rule | Tree | Include;
+node RuleSet { Name name; RuleDeclaration* declarations; }
+sum RuleDeclaration = Nonterminal | Terminal | Rule | Include;
+node Nonterminal { Ident name; Unsigned? number; }
+node Terminal { Ident name; Unsigned arity; }
+node Rule { Unsigned? number; Ident result; Pattern pattern; Name instruction; RuleOption* options; }
+sum RuleOption = Cost | Priority | Type | Immediate;
+node Cost { Integer amount; }
+node Priority { Integer amount; }
+node Type { Ident name; }
+node Immediate { Integer lower @0; Integer upper @1; }
+node Pattern { Ident symbol; PatternArguments? arguments; PatternConstraint* constraints; }
+node PatternArguments { Pattern* children; }
+sum PatternConstraint = TypeConstraint | ImmediateConstraint;
+node TypeConstraint { Ident name; }
+node ImmediateConstraint { Integer lower @0; Integer upper @1; }
+node Tree { Name name; TreeNode* nodes; Root root_node; }
+node TreeNode { Ref result @0; Ref* operands @1; Ident opcode; TypeConstraint? type; Integer? immediate; }
+node Root { Ref reference; Ident nonterminal; }
+node Include { String path; }
+sum Name = Ident | String;
+token Ref;
+token Unsigned;
+token Integer;
+token String;
+token Ident;

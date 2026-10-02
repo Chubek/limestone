@@ -16,7 +16,8 @@ Fields: Field*;
 /* Object-valued sections also accept the bundle's brace-terminated spelling. */
 Field: FieldName '=' Value? ';' | FieldName '=' Object | FieldName '{' Fields '}' ';'?;
 FieldName: Ident ('[' Number ':' Number ']')?;
-Value: String | Number | Boolean | Array | Object | SExpr | CallList | BareList;
+/* Bare metadata is a fallback: prefer a structured value when both parses exist. */
+Value: String | Number | Boolean | Array | Object | SExpr | CallList | BareList -1;
 Array: '[' (Value (',' Value)*)? ']';
 Object: '{' Fields '}';
 CallList: Call (',' Call)*;
@@ -29,4 +30,4 @@ BareList: BareAtom (',' BareAtom)*;
 BareAtom: "[^;}\]), \"\t\r\n[{(][^;}\]),]*";
 String: "\"([^\"\\]|\\[^])*\"";
 Ident: "[A-Za-z_][A-Za-z0-9_.-]*";
-whitespace: "([ \t\r\n]|#[^\n]*(\n|$))*";
+whitespace: "([ \t\r\n]|#[^\n]*)*";

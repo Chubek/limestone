@@ -1,0 +1,30 @@
+/* BURS rule descriptions and explicit selection trees. */
+${declare longest_match Document}
+Document: Declaration*;
+Declaration: RuleSet | Nonterminal | Terminal | Rule | Tree | Include;
+RuleSet: 'ruleset' Name '{' RuleDeclaration* '}';
+RuleDeclaration: Nonterminal | Terminal | Rule | Include;
+Nonterminal: 'nonterminal' Ident ('=' Unsigned)? ';';
+Terminal: 'terminal' Ident '(' Unsigned ')' ';';
+Rule: 'rule' Unsigned? Ident ':' Pattern '->' Name RuleOption* ';';
+RuleOption: Cost | Priority | Type | Immediate;
+Cost: 'cost' Integer;
+Priority: 'priority' Integer;
+Type: 'type' Ident;
+Immediate: 'immediate' '[' Integer '..' Integer ']';
+Pattern: Ident PatternArguments? PatternConstraint*;
+PatternArguments: '(' (Pattern (',' Pattern)*)? ')';
+PatternConstraint: TypeConstraint | ImmediateConstraint;
+TypeConstraint: ':' Ident;
+ImmediateConstraint: '[' Integer '..' Integer ']';
+Tree: 'tree' Name '{' TreeNode* Root '}';
+TreeNode: 'node' Ref '=' Ident '(' (Ref (',' Ref)*)? ')' TypeConstraint? ('immediate' Integer)? ';';
+Root: 'root' Ref ':' Ident ';';
+Include: 'include' String ';';
+Name: Ident | String;
+Ref: "%[A-Za-z0-9_][A-Za-z0-9_.-]*";
+Unsigned: "[0-9]+";
+Integer: "-?[0-9]+";
+String: "\"([^\"\\]|\\[^])*\"";
+Ident: "[A-Za-z_][A-Za-z0-9_.-]*" $term -1;
+whitespace: "([ \t\r\n]|#[^\n]*|[/][/][^\n]*|[/][*]([^*]|[*]+[^*/])*[*]+[/])*";

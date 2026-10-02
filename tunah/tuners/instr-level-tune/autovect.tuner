@@ -28,6 +28,11 @@
 ;   * Lanes are integers, so addition is associative and commutative and a
 ;     reduction distributes over an elementwise sum. The rules would not be
 ;     sound for floating point lanes, where reassociation changes the result.
+;   * Distributing sign extension over arithmetic requires a host analysis
+;     proving that every narrow signed lane result fits without overflow.
+;     The vector-signed-*-fits predicates carry this proof obligation.
+;   * av-broadcast takes a scalar and av-reduce-add returns a scalar. Neither
+;     may be equated with a vector operand or an elementwise vector result.
 ;   * The superword rule requires the two stores to be adjacent in the same
 ;     block and to write consecutive byte locations, which is exactly what
 ;     the pattern states. A store to an address that is not a constant offset
@@ -72,16 +77,17 @@
 (rule av-shl-zero (av-shl ?a 0) ?a)
 ; A negation of the zero vector is the zero vector.
 (rule av-neg-zero (av-neg 0) 0)
-; A broadcast is an elementwise sum with the zero broadcast, which is the
-; canonical form the neutral element rule above then erases.
-(rule av-broadcast-is-zero-add (av-broadcast ?a) (av-add ?a 0))
-; Sign extension distributes over an elementwise sum, so the wide vector form
-; of a narrow sum is visible to the wide rules.
-(rule av-sext-of-add (av-sext (av-add ?a ?b)) (av-add (av-sext ?a) (av-sext ?b)))
-; It distributes over an elementwise difference the same way.
-(rule av-sext-of-sub (av-sext (av-sub ?a ?b)) (av-sub (av-sext ?a) (av-sext ?b)))
-; It distributes over an elementwise product the same way.
-(rule av-sext-of-mul (av-sext (av-mul ?a ?b)) (av-mul (av-sext ?a) (av-sext ?b)))
+; Adding scalar zero before broadcasting does not change the broadcast lanes.
+(rule av-broadcast-drop-zero-add (av-broadcast (iadd ?a 0)) (av-broadcast ?a))
+; A lane-wise signed sum can be widened distributively only if no lane wraps.
+(rule av-sext-of-add (av-sext (av-add ?a ?b)) (av-add (av-sext ?a) (av-sext ?b))
+  :where (vector-signed-add-fits ?a ?b))
+; The same proof obligation for every exact signed lane difference.
+(rule av-sext-of-sub (av-sext (av-sub ?a ?b)) (av-sub (av-sext ?a) (av-sext ?b))
+  :where (vector-signed-sub-fits ?a ?b))
+; The same proof obligation for every exact signed lane product.
+(rule av-sext-of-mul (av-sext (av-mul ?a ?b)) (av-mul (av-sext ?a) (av-sext ?b))
+  :where (vector-signed-mul-fits ?a ?b))
 ; There is deliberately no rule distributing av-zext. A zero extension of a sum
 ; is not the sum of the zero extensions when the narrow sum overflows a lane,
 ; because the carry out of the narrow add is dropped by the widening and kept by
@@ -96,7 +102,7 @@
 ; A reduction distributes over an elementwise sum, because the lanes are
 ; integers and their total is the sum of the totals.
 (rule av-reduce-of-add (av-reduce-add (av-add ?a ?b))
-  (av-add (av-reduce-add ?a) (av-reduce-add ?b)))
+  (iadd (av-reduce-add ?a) (av-reduce-add ?b)))
 ; Two adjacent stores to consecutive byte locations are one vector store of two
 ; lanes. This is the superword level parallelism case, and the only rule in this
 ; directory that builds a vector node out of scalar nodes.
