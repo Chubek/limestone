@@ -1,0 +1,99 @@
+; =============================================================================
+; Tunah tuner -- instruction climbing
+; =============================================================================
+; Purpose       : Give every value one width spelling, so that the rules of the
+;                other files in this directory see through a change of width.
+;                Redundant widening, a truncation that undoes a widening, and
+;                the two spellings of a predicated select all collapse; and
+;                widening is pushed down through an operation so that the wide
+;                form of a 32 bit computation becomes visible to the 64 bit
+;                rules.
+; Stage         : Instruction level machine IL, after widening and narrowing
+;                have been inserted and before instruction selection.
+; Vocabulary    : sext8to32, zext8to32, sext32to64, zext32to64, trunc32to8,
+;                trunc64to32, ite, sel, copy, and the integer operators of the
+;                shared directory vocabulary.
+; Preconditions : A width change is a value conversion, so its bit width is
+;                named by the operator itself: sext32to64 sign extends, zext32to64
+;                zero extends, and the trunc operators keep the low bits. A
+;                truncation of a widening is the identity when the widening was
+;                exact, and a widening of a truncation is the same widening
+;                applied to the value, which is what the rules below state.
+;                Distributing a widening is sound only for sign extension: a
+;                zero extension of a sum is not the sum of the zero extensions,
+;                because the carry out of the narrow add is dropped by the
+;                widening but kept by the wide add. That asymmetry is why the
+;                distribution rules below are stated for sext only, and it is
+;                the reason the file cannot be extended to zext by analogy.
+; Cost model    : The collapse rules are cost reducing. The distribution rules
+;                grow the term, which is deliberate: they are the only way a
+;                saturated e-graph can reach the wide form of a narrow
+;                computation, and the extractor keeps the narrow term whenever
+;                the wide form buys no cheaper alternative.
+; Termination   : The collapse rules only remove a conversion, so they strictly
+;                shrink their match. The distribution rules replace one
+;                conversion applied to one operation with one conversion per
+;                operand, which adds a single node per operand of a single
+;                operation and never re-applies itself, because the operand
+;                rule is stated on the operation and not on the conversion. The
+;                ite and sel rules are an explicit two cycle on one node shape
+;                and are closed.
+;
+; Operator signatures required by this file:
+; signatures: sext8to32 1, zext8to32 1, sext32to64 1, zext32to64 1,
+;             trunc32to8 1, trunc64to32 1, ite 3, sel 3, copy 1, iadd 2,
+;             isub 2, imul 2, iand 2, ior 2, ineg 1
+; =============================================================================
+
+; A truncation undoes an exact widening, so the pair is the original value.
+(rule ic-trunc-of-sext (trunc64to32 (sext32to64 ?x)) ?x)
+; Truncating a zero extension yields the zero extended value itself, because
+; the low half of a zero extended narrow value is the value.
+(rule ic-trunc-of-zext (trunc64to32 (zext32to64 ?x)) (zext32to64 ?x))
+; Widening a truncation is a widening of the value, whichever widening it is.
+(rule ic-sext-of-trunc (sext32to64 (trunc64to32 ?x)) (sext32to64 ?x))
+; The other order: a widening of a truncation is a widening.
+(rule ic-zext-of-trunc (zext32to64 (trunc64to32 ?x)) (zext32to64 ?x))
+; Truncating twice to the same width is one truncation.
+(rule ic-trunc-of-trunc (trunc64to32 (trunc64to32 ?x)) (trunc64to32 ?x))
+; Widening an already wide value by the same amount changes nothing, so one
+; widening suffices.
+(rule ic-sext-of-sext (sext32to64 (sext32to64 ?x)) (sext32to64 ?x))
+; Same, for the zero widening.
+(rule ic-zext-of-zext (zext32to64 (zext32to64 ?x)) (zext32to64 ?x))
+; Same, for the narrow widening.
+(rule ic-sext8-of-sext8 (sext8to32 (sext8to32 ?x)) (sext8to32 ?x))
+; Same, for the narrow zero widening.
+(rule ic-zext8-of-zext8 (zext8to32 (zext8to32 ?x)) (zext8to32 ?x))
+; A copy has no width of its own, so a conversion applied to a copy is a
+; conversion applied to the copied value.
+(rule ic-sext-of-copy (sext32to64 (copy ?x)) (sext32to64 ?x))
+; Same, for a truncation.
+(rule ic-trunc-of-copy (trunc64to32 (copy ?x)) (trunc64to32 ?x))
+; A predicated value and a data move select are the same operation with the
+; condition in a different place. Stating both directions gives one spelling
+; so that the const-prop, ctrlflow and dataflow rules of this directory can
+; match either form.
+(rule ic-ite-to-sel (ite ?c ?a ?b) (sel ?a ?b ?c))
+; The same identity in the other spelling, so either form can be matched.
+(rule ic-sel-to-ite (sel ?a ?b ?c) (ite ?c ?a ?b))
+; Sign extension distributes over an exact integer operation, so the wide form
+; of a 32 bit computation is the wide operation of the 32 bit operands. This
+; is the climbing step: it is the only way the saturated e-graph can hold the
+; 64 bit spelling of a narrow computation, and the rules of the wide forms
+; apply to it.
+(rule ic-sext-of-add (sext32to64 (iadd ?x ?y)) (iadd (sext32to64 ?x) (sext32to64 ?y)))
+; Subtraction distributes the same way.
+(rule ic-sext-of-sub (sext32to64 (isub ?x ?y)) (isub (sext32to64 ?x) (sext32to64 ?y)))
+; Multiplication distributes the same way.
+(rule ic-sext-of-mul (sext32to64 (imul ?x ?y)) (imul (sext32to64 ?x) (sext32to64 ?y)))
+; Bitwise and distributes the same way, bit by bit.
+(rule ic-sext-of-and (sext32to64 (iand ?x ?y)) (iand (sext32to64 ?x) (sext32to64 ?y)))
+; Bitwise or distributes the same way.
+(rule ic-sext-of-or (sext32to64 (ior ?x ?y)) (ior (sext32to64 ?x) (sext32to64 ?y)))
+; Negation commutes with sign extension.
+(rule ic-sext-of-neg (sext32to64 (ineg ?x)) (ineg (sext32to64 ?x)))
+; The zero extension case is deliberately absent. For x and y in the narrow
+; width, zext(x + y mod 2^32) is not zext(x) + zext(y), because the carry out
+; of the narrow addition is discarded by the widening and kept by the wide one.
+; No range analysis is available to this tuner, so the rule would be unsound.
