@@ -5,6 +5,7 @@
 
 namespace limestone::regtl {
 Result<Liveness> analyze(const Function& function) {
+  Program register_model;register_model.classes=function.classes;register_model.aliases=function.aliases;register_model.storage=function.storage;
   using Set=std::set<VReg>;
   std::map<VReg,const VirtualRegister*> values;
   std::map<uint32_t,const Block*> blocks;
@@ -26,7 +27,7 @@ Result<Liveness> analyze(const Function& function) {
       std::function<bool(const TransferOperand&,bool)> transfer_operand=[&](const TransferOperand& operand,bool written){
         switch(operand.kind){case TransferOperand::Kind::Virtual:return values.contains(operand.id)&&std::find((written?instruction.defs:instruction.uses).begin(),(written?instruction.defs:instruction.uses).end(),operand.id)!=(written?instruction.defs:instruction.uses).end();case TransferOperand::Kind::Physical:return physical.contains(operand.id)&&std::find((written?instruction.physical_defs:instruction.physical_uses).begin(),(written?instruction.physical_defs:instruction.physical_uses).end(),operand.id)!=(written?instruction.physical_defs:instruction.physical_uses).end();case TransferOperand::Kind::Immediate:return !written&&operand.address.empty();case TransferOperand::Kind::Spill:return operand.address.empty();case TransferOperand::Kind::Memory:return operand.address.size()==1&&transfer_operand(operand.address[0],false);}return false;
       };
-      for(size_t k=0;k<instruction.transfers.size();++k){auto& transfer=instruction.transfers[k];if(!transfer_operand(transfer.destination,true)||!transfer_operand(transfer.source,false))return Result<Liveness>::err({Error::Code::Conflict,"transfer operands disagree with allocation dataflow"});if(instruction.parallel)for(size_t j=0;j<k;++j){auto& a=instruction.transfers[j].destination;auto& b=transfer.destination;bool overlap=a==b;if(a.kind==TransferOperand::Kind::Physical&&b.kind==TransferOperand::Kind::Physical)for(auto [x,y]:function.aliases)overlap|=(a.id==x&&b.id==y)||(a.id==y&&b.id==x);if(overlap)return Result<Liveness>::err({Error::Code::Conflict,"overlapping parallel transfer destinations"});}}
+      for(size_t k=0;k<instruction.transfers.size();++k){auto& transfer=instruction.transfers[k];if(!transfer_operand(transfer.destination,true)||!transfer_operand(transfer.source,false))return Result<Liveness>::err({Error::Code::Conflict,"transfer operands disagree with allocation dataflow"});if(instruction.parallel)for(size_t j=0;j<k;++j){auto& a=instruction.transfers[j].destination;auto& b=transfer.destination;bool overlap=a==b;if(a.kind==TransferOperand::Kind::Physical&&b.kind==TransferOperand::Kind::Physical)overlap|=registers_overlap(register_model,a.id,b.id);if(overlap)return Result<Liveness>::err({Error::Code::Conflict,"overlapping parallel transfer destinations"});}}
       for(auto reg:instruction.clobbers)if(!physical.contains(reg))return Result<Liveness>::err({Error::Code::InvalidArgument,"unknown clobbered physical register"});
       for(auto reg:instruction.physical_uses){if(!physical.contains(reg))return Result<Liveness>::err({Error::Code::InvalidArgument,"unknown implicit physical input"});if(!physical_def[block.id].contains(reg))physical_use[block.id].insert(reg);}
       for(auto reg:instruction.physical_defs){if(!physical.contains(reg))return Result<Liveness>::err({Error::Code::InvalidArgument,"unknown implicit physical definition"});physical_def[block.id].insert(reg);}
@@ -57,6 +58,7 @@ Result<Liveness> analyze(const Function& function) {
     }
   }
   Liveness result;auto& problem=result.problem;problem.classes=function.classes;problem.aliases=function.aliases;problem.reserved=function.reserved;problem.explicit_interference=true;
+  problem.storage=function.storage;problem.tuples=function.tuples;
   std::set<std::pair<VReg,VReg>> edges,ties;
   std::map<VReg,Set> forbidden;
   std::map<VReg,std::set<uint32_t>> positions;
@@ -92,7 +94,7 @@ Result<Liveness> analyze(const Function& function) {
     auto constraint=value->constraint;
     for(auto physical:forbidden[id]) {
       constraint.forbidden.push_back(physical);
-      for(auto [a,b]:function.aliases){if(a==physical)constraint.forbidden.push_back(b);if(b==physical)constraint.forbidden.push_back(a);}
+      for(auto& klass:function.classes)for(auto reg:klass.members)if(reg!=physical&&registers_overlap(register_model,reg,physical))constraint.forbidden.push_back(reg);
     }
     auto& points=positions[id];if(points.empty())points.insert(0);
     std::vector<std::pair<uint32_t,uint32_t>> segments;

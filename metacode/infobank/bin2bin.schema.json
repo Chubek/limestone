@@ -29,6 +29,11 @@
     "instruction_encoding": {
       "type": "string"
     },
+    "codec_adapter": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning host codec identity required for native adapter encodings."
+    },
     "encoding_widths": {
       "type": "array",
       "items": {

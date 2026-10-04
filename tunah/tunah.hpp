@@ -6,8 +6,11 @@ namespace limestone::tunah {
 struct SourceLocation {
   std::string file;
   size_t line=1, column=1, offset=0;
-  // Coordinates refer to the expanded stream when EkippX changed the input.
+  // Coordinates refer to the original source or a macro's invocation. Expanded
+  // byte coordinates are retained separately when EkippX changed the input.
   bool expanded=false;
+  std::optional<size_t> expanded_offset;
+  bool operator==(const SourceLocation&) const = default;
 };
 struct Term {
   std::string op;
@@ -33,6 +36,23 @@ struct Limits {
   std::function<bool()> cancelled;
   bool trace=true;
 };
+struct DerivationNode {
+  uint32_t id=0, eclass=0;
+  std::string op, rule;
+  std::optional<int64_t> constant;
+  std::vector<uint32_t> children;
+  SourceLocation location;
+  std::vector<SourceLocation> origins;
+};
+struct DerivationStep {
+  uint32_t lhs=0, rhs=0, result=0;
+  std::string rule; // Empty for a congruence merge.
+  std::vector<std::pair<std::string,uint32_t>> bindings;
+  SourceLocation location;
+  // Congruence witnesses refer to immutable insertion facts; earlier equality
+  // steps canonicalize their child classes to justify the congruence merge.
+  std::optional<uint32_t> lhs_node,rhs_node;
+};
 struct SaturationResult {
   size_t rewrites=0; bool saturated=false;
   std::string expression; size_t cost=0, nodes=0, iterations=0;
@@ -40,7 +60,13 @@ struct SaturationResult {
   std::vector<std::string> trace;
   Term term;
   size_t classes=0;
+  // Ordered insertion and equality facts; enabled by Limits::trace.
+  std::vector<DerivationNode> derivation_nodes;
+  std::vector<DerivationStep> derivation_steps;
+  bool graph_discarded=false;
+  std::optional<uint32_t> root_class,extracted_class;
 };
+std::string print_derivation(const SaturationResult&);
 Result<Term> parse_term(std::string_view expression, std::string_view source="<tunah>");
 std::string format_term(const Term&);
 

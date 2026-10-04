@@ -13,6 +13,17 @@ int main(string[] args) {
     enforce(exchange.instructionId(0)==1&&exchange.physicalRegister(1).isNull);
     enforce(exchange.instructionContract(0).indexOf("const.i64")>=0);
     auto copy=readExchange(writeExchange(exchange));enforce(dump(copy.program.functions[0])==dump(f));
+    auto wide=parseJSON(writeExchange(exchange));wide["version"]=JSONValue(4);
+    wide["instructions"][0]["issue_width"]=JSONValue(2);wide["instructions"][0]["issue_slots"]=JSONValue([JSONValue(0),JSONValue(2)]);
+    wide["schedule"][0]["slot"]=JSONValue(0);wide["schedule"][0]["additional_slots"]=JSONValue([JSONValue(2)]);
+    auto wideExchange=readExchange(toJSON(wide));auto wideCopy=readExchange(writeExchange(wideExchange));enforce(wideCopy.instructionContract(0).indexOf("issue_width")>=0);
+    auto invalidWide=parseJSON(toJSON(wide));invalidWide["schedule"][0]["additional_slots"]=JSONValue([JSONValue(0)]);assertThrown!ExchangeError(readExchange(toJSON(invalidWide)));
+    invalidWide=parseJSON(toJSON(wide));invalidWide["schedule"][0]["additional_slots"]=JSONValue(cast(JSONValue[])[]);assertThrown!ExchangeError(readExchange(toJSON(invalidWide)));
+    invalidWide=parseJSON(toJSON(wide));invalidWide["version"]=JSONValue(3);assertThrown!ExchangeError(readExchange(toJSON(invalidWide)));
+    auto timed=parseJSON(writeExchange(exchange));timed["version"]=JSONValue(5);timed["instructions"][0]["latency_range"]=JSONValue([JSONValue(2),JSONValue(8)]);timed["instructions"][0]["result_latency_ranges"]=JSONValue(["1":JSONValue([JSONValue(1),JSONValue(6)])]);timed["schedule"][1]["cycle"]=JSONValue(6);readExchange(toJSON(timed));
+    timed["schedule"][1]["cycle"]=JSONValue(5);assertThrown!ExchangeError(readExchange(toJSON(timed)));
+    timed["instructions"][0]["operand_latencies"]=JSONValue([JSONValue(["result":JSONValue(1),"consumer":timed["instructions"][1]["opcode"],"use":JSONValue(0),"cycles":JSONValue([JSONValue(0),JSONValue(2)]),"implicit":JSONValue(false)])]);timed["schedule"][1]["cycle"]=JSONValue(2);auto timedExchange=readExchange(toJSON(timed));enforce(readExchange(writeExchange(timedExchange)).instructionContract(0).indexOf("operand_latencies")>=0);
+    auto invalidTiming=parseJSON(toJSON(timed));invalidTiming["version"]=JSONValue(4);assertThrown!ExchangeError(readExchange(toJSON(invalidTiming)));invalidTiming=parseJSON(toJSON(timed));invalidTiming["instructions"][0]["latency_range"]=JSONValue([JSONValue(8),JSONValue(2)]);assertThrown!ExchangeError(readExchange(toJSON(invalidTiming)));
     auto corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["throughput"]=JSONValue("0");assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
     corrupt=parseJSON(readText(args[1]));corrupt["instructions"][0]["early_defs"]=JSONValue([JSONValue(999)]);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
     corrupt=parseJSON(readText(args[1]));corrupt["instructions"][1]["defs"]=corrupt["instructions"][0]["defs"];assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
@@ -26,6 +37,29 @@ int main(string[] args) {
     corrupt["instructions"][0]["issue_slots"]=JSONValue([JSONValue(0)]);corrupt["schedule"][0]["slot"]=JSONValue(1);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));corrupt["schedule"][0]["slot"]=JSONValue(0);readExchange(toJSON(corrupt));
     corrupt=parseJSON(readText(args[1]));corrupt["instructions"][1]["uses"]=JSONValue(cast(JSONValue[])[]);corrupt["instructions"][1]["terminator"]=JSONValue(false);corrupt["instructions"][1]["control"]=JSONValue("none");corrupt["dependencies"]=JSONValue(cast(JSONValue[])[]);corrupt["schedule"][0]["cycle"]=JSONValue(5);corrupt["schedule"][1]["cycle"]=JSONValue(0);corrupt["instructions"][0]["implicit_uses"]=JSONValue([JSONValue(17)]);corrupt["instructions"][1]["implicit_defs"]=JSONValue([JSONValue(17)]);assertThrown!ExchangeError(readExchange(toJSON(corrupt)));
     assertThrown!Exception(readExchange("{\"schema\":\"wrong\",\"version\":1}"));
+    auto atomicReads=parseJSON(readText(args[1]));
+    atomicReads["instructions"][1]["uses"]=JSONValue(cast(JSONValue[])[]);
+    atomicReads["instructions"][1]["terminator"]=JSONValue(false);
+    atomicReads["instructions"][1]["barrier"]=JSONValue(false);
+    atomicReads["instructions"][1]["control"]=JSONValue("none");
+    atomicReads["dependencies"]=JSONValue(cast(JSONValue[])[]);
+    foreach(ref instruction_;atomicReads["instructions"].array) {
+        instruction_["latency"]=JSONValue(0);
+        instruction_["access"]=JSONValue(["read":JSONValue(true),"write":JSONValue(false),"volatile":JSONValue(false),"atomic":JSONValue(true),"ordering":JSONValue("relaxed"),"address_space":JSONValue("heap"),"alias_sets":JSONValue([JSONValue(4)]),"size":JSONValue(8),"alignment":JSONValue(8)]);
+    }
+    atomicReads["schedule"][0]["cycle"]=JSONValue(0);atomicReads["schedule"][1]["cycle"]=JSONValue(0);
+    readExchange(toJSON(atomicReads));
+    priorIssue=atomicReads["schedule"][0];atomicReads["schedule"][0]=atomicReads["schedule"][1];atomicReads["schedule"][1]=priorIssue;
+    assertThrown!ExchangeError(readExchange(toJSON(atomicReads)));
+    atomicReads["instructions"][1]["access"]["alias_sets"]=JSONValue([JSONValue(5)]);
+    readExchange(toJSON(atomicReads));
+    atomicReads["instructions"][1]["access"]["alias_sets"]=JSONValue(cast(JSONValue[])[]);
+    assertThrown!ExchangeError(readExchange(toJSON(atomicReads)));
+    atomicReads["instructions"][1]["access"]["address_space"]=JSONValue("private");
+    readExchange(toJSON(atomicReads));
+    atomicReads["instructions"][1]["access"]["address_space"]=JSONValue("heap");
+    foreach(ref instruction_;atomicReads["instructions"].array)instruction_["access"]["atomic"]=JSONValue(false);
+    readExchange(toJSON(atomicReads));
     auto repeated=readText(args[1]);assertThrown!ExchangeError(readExchange("{\"schema\":\"limestone.machineir.region\","~repeated[1..$]));
     assertThrown!ExchangeError(readExchange("{\"\\u0073chema\":\"limestone.machineir.region\","~repeated[1..$]));
     auto empty=RegionExchange.init;assertThrown!ExchangeError(writeExchange(empty));
@@ -34,10 +68,20 @@ int main(string[] args) {
     auto grouped=parseJSON(writeExchange(exchange));grouped["version"]=JSONValue(3);
     grouped["groups"]=JSONValue([JSONValue(["id":JSONValue(5),"kind":JSONValue("adjacent"),"members":JSONValue([JSONValue(1),JSONValue(2)]),"name":JSONValue("result"),"origin":JSONValue("fixture"),"pattern":JSONValue("produce-return"),"benefit":JSONValue(2),"issue_width":JSONValue(0),"issue_slots":JSONValue(cast(JSONValue[])[])])]);
     auto grouping=readExchange(toJSON(grouped));enforce(grouping.groupCount==1&&grouping.groupContract(0).indexOf("produce-return")>=0);assertThrown!ExchangeError(grouping.groupContract(99));
+    auto sourced=parseJSON(toJSON(grouped));sourced["version"]=JSONValue(6);
+    sourced["instructions"][0]["source_metadata"]=JSONValue(["17":JSONValue(["strings":JSONValue([JSONValue(["index":JSONValue(0),"value":JSONValue("runtime label")])]),"properties":JSONValue(["domain":JSONValue("target"),"nested":JSONValue([JSONValue(7),JSONValue(true)])])])]);
+    auto sourceExchange=readExchange(toJSON(sourced));enforce(readExchange(writeExchange(sourceExchange)).instructionContract(0).indexOf("runtime label")>=0);
+    auto invalidSource=parseJSON(toJSON(sourced));invalidSource["version"]=JSONValue(5);assertThrown!ExchangeError(readExchange(toJSON(invalidSource)));
+    invalidSource=parseJSON(toJSON(sourced));invalidSource["instructions"][0]["source_metadata"]["17"]["strings"][0]["index"]=JSONValue(4294967296UL);assertThrown!ExchangeError(readExchange(toJSON(invalidSource)));
+    invalidSource=parseJSON(toJSON(sourced));auto argument=invalidSource["instructions"][0]["source_metadata"]["17"]["strings"][0];invalidSource["instructions"][0]["source_metadata"]["17"]["strings"]=JSONValue([argument,argument]);assertThrown!ExchangeError(readExchange(toJSON(invalidSource)));
+    invalidSource=parseJSON(toJSON(sourced));invalidSource["instructions"][0]["source_metadata"]["17"]["future"]=JSONValue(true);assertThrown!ExchangeError(readExchange(toJSON(invalidSource)));
+    invalidSource=parseJSON(toJSON(sourced));invalidSource["instructions"][0]["source_metadata"]["17"]["strings"][0]["value"]=JSONValue("nul\0text");assertThrown!ExchangeError(readExchange(toJSON(invalidSource)));
+    auto overlapping=parseJSON(toJSON(grouped));auto sharedGroup=parseJSON(toJSON(grouped["groups"][0]));sharedGroup["id"]=JSONValue(6);sharedGroup["kind"]=JSONValue("pair");overlapping["groups"]=JSONValue([overlapping["groups"][0],sharedGroup]);enforce(readExchange(toJSON(overlapping)).groupCount==2);
+    overlapping["groups"][1]["kind"]=JSONValue("same_cycle");overlapping["schedule"][1]["cycle"]=JSONValue(1);assertThrown!ExchangeError(readExchange(toJSON(overlapping)));
     auto invalidGroup=parseJSON(toJSON(grouped));invalidGroup["version"]=JSONValue(2);assertThrown!ExchangeError(readExchange(toJSON(invalidGroup)));
     invalidGroup=parseJSON(toJSON(grouped));invalidGroup["groups"][0]["members"]=JSONValue([JSONValue(2),JSONValue(1)]);assertThrown!ExchangeError(readExchange(toJSON(invalidGroup)));
     invalidGroup=parseJSON(toJSON(grouped));invalidGroup["groups"][0]["kind"]=JSONValue("same_cycle");invalidGroup["schedule"][1]["cycle"]=JSONValue(1);assertThrown!ExchangeError(readExchange(toJSON(invalidGroup)));
-    exchange=grouping;f=exchange.program.functions[0];b=f.blocks[0];
+    exchange=sourceExchange;f=exchange.program.functions[0];b=f.blocks[0];
     b.instructions[0].operands[0].integer=43;write(args[2],writeExchange(exchange));
     b.instructions[0].effects.mayTrap=true;assertThrown!ExchangeError(writeExchange(exchange));
     auto cfg=readExchange(readText(args[3]));auto graph=cfg.program.functions[0];
@@ -51,6 +95,7 @@ int main(string[] args) {
     graph.blocks[2].instructions[0].operands[0].integer=43;write(args[4],writeExchange(cfg));
     graph.blocks[0].successors[0]=9;assertThrown!ExchangeError(writeExchange(cfg));
     auto spilled=readExchange(readText(args[5]));enforce(spilled.frameSize>0&&spilled.spillFrameContract.indexOf("offset")>=0);
+    enforce(spilled.instructionContract(0).indexOf("latency_range")>=0);
     auto spillFunction=spilled.program.functions[0];bool hasLoad,hasStore,edited;
     foreach(ref i;spillFunction.blocks[0].instructions){hasLoad|=i.opcode.name=="RELOAD";hasStore|=i.opcode.name=="SPILL";if(i.opcode.name=="CONST"&&i.operands[0].integer==7){i.operands[0].integer=8;edited=true;}}
     enforce(hasLoad&&hasStore&&edited);auto returned=writeExchange(spilled);enforce(readExchange(returned).frameSize==spilled.frameSize);write(args[6],returned);

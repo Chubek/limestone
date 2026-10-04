@@ -1,7 +1,7 @@
 #include "optimization_internal.hpp"
 #include "c_api_internal.hpp"
 
-struct limestone_optimization { limestone::tunah::SaturationResult result; };
+struct limestone_optimization { limestone::tunah::SaturationResult result; std::string derivation; };
 namespace {
 using namespace limestone::c_api_internal;
 using limestone::Error;
@@ -93,7 +93,8 @@ extern "C" limestone_optimization* limestone_optimizer_saturate(const limestone_
     require(optimizer,"null optimizer");require(expression,"null optimization term");
     // Callbacks can destroy their source handle without invalidating a run.
     auto snapshot=*optimizer;auto term=checked(limestone::tunah::parse_term(expression,source_name?source_name:"<tunah>"));
-    return new limestone_optimization{checked(snapshot.session.saturate(term,snapshot.options.limits,snapshot.options.costs))};
+    auto result=checked(snapshot.session.saturate(term,snapshot.options.limits,snapshot.options.costs));auto derivation=limestone::tunah::print_derivation(result);
+    return new limestone_optimization{std::move(result),std::move(derivation)};
   });
 }
 extern "C" void limestone_optimization_destroy(limestone_optimization* result){delete result;}
@@ -103,6 +104,8 @@ extern "C" limestone_status limestone_optimization_get_info(const limestone_opti
 }
 extern "C" size_t limestone_optimization_trace_count(const limestone_optimization* result){return result?result->result.trace.size():0;}
 extern "C" const char* limestone_optimization_trace(const limestone_optimization* result,size_t index){return result&&index<result->result.trace.size()?result->result.trace[index].c_str():nullptr;}
+extern "C" const char* limestone_optimization_derivation(const limestone_optimization* result){return result?result->derivation.c_str():nullptr;}
+extern "C" int limestone_optimization_used_fallback(const limestone_optimization* result){return result&&result->result.graph_discarded;}
 
 extern "C" limestone_binary_transform* limestone_optimizer_binary_transform(const limestone_optimizer* optimizer,const char* context,limestone_binary_legality legality,void* userdata,limestone_optimizer_release release,limestone_error* error) {
   return boundary(error,[&]()->limestone_binary_transform* {

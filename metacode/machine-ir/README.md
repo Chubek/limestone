@@ -18,6 +18,9 @@ It deliberately separates:
 The `.isa` loader is intentionally lossless at the generic-value level. Unknown
 metadata is retained in `MachineSpec.raw`, so adding a field to the Infobank
 does not require changing MachineIR immediately.
+Quoted metadata uses JSON string escapes, including Unicode surrogate pairs.
+Malformed escapes, invalid UTF-8, and unescaped control characters are rejected;
+printing preserves decoded strings, including embedded control characters.
 
 ## Layout
 
@@ -71,6 +74,8 @@ The `limestone.machineir.region` schema exports a compiler region and its owning
 selection/timing/allocation envelope. Version 1 handles simple regions; version 2
 adds CFG/control targets, spill frames, and architectural-result latency.
 Version 3 adds scheduling groups, fusion hints, and bundle issue constraints.
+Groups may overlap; each contract is checked independently, including shared
+members' adjacency, cycle and slot requirements.
 
 ```d
 import machineir;
@@ -91,6 +96,8 @@ malformed resources/slots, order/latency violations, and inconsistent CFG/frame
 data. JSON is bounded to 4 MiB and 256 nesting levels. Throughput and resource
 quantities are decimal strings. Complete resource/alias/allocation verification
 still consumes target metadata through the subsystem verifiers.
+Potentially aliasing atomic reads retain their source order even with relaxed
+ordering, including when the envelope supplies no explicit memory dependency.
 
 `writeExchange` preserves the envelope while admitting immediate, naming, and
 source-provenance edits. Structural, opcode, dataflow, effect, and machine-config

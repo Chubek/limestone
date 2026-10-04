@@ -1,4 +1,5 @@
 #include "limestone.hpp"
+#include "schedrow/timing_metadata.hpp"
 #include "limeburg/target.hpp"
 #include "bin2bin/codegen.hpp"
 #include <charconv>
@@ -33,24 +34,34 @@ Result<PipelineTarget> make_target(const unisel::MachineDescription& description
     PipelineTarget target;target.name=description.name;target.patterns=description.patterns;target.metadata=description.metadata;
     for(auto& [name,registers]:description.register_classes)target.register_classes.push_back({name,registers});
     std::sort(target.register_classes.begin(),target.register_classes.end(),[](auto& a,auto& b){return a.name<b.name;});target.aliases=description.aliases;
-    target.scheduling.register_aliases=target.aliases;
+    if(auto field=description.metadata.find("register_storage");field!=description.metadata.end()) {
+      auto array=std::get_if<metacode::Value::Array>(&field->second.data);if(!array)throw Error{Error::Code::InvalidArgument,"register_storage must be an array"};
+      for(auto& value:*array){auto r=std::get_if<Object>(&value.data);if(!r)throw Error{Error::Code::InvalidArgument,"register storage must be an object"};known(*r,{"register","bank","slices"},"register storage");auto name=text(*r,"register");regtl::RegisterStorage storage;storage.id=description.physical_names.contains(name)?description.physical_names.at(name):number(name);storage.bank=text(*r,"bank");
+        if(auto slices=r->find("slices");slices!=r->end()){auto parts=std::get_if<metacode::Value::Array>(&slices->second.data);if(!parts)throw Error{Error::Code::InvalidArgument,"register slices must be an array"};for(auto& part:*parts){auto s=std::get_if<Object>(&part.data);if(!s)throw Error{Error::Code::InvalidArgument,"register slice must be an object"};known(*s,{"unit","begin","width"},"register slice");storage.slices.push_back({number(text(*s,"unit")),number(text(*s,"begin")),number(text(*s,"width"))});}}
+        target.register_storage.push_back(std::move(storage));
+      }
+    }
+    regtl::Program storage_model;storage_model.classes=target.register_classes;storage_model.aliases=target.aliases;storage_model.storage=target.register_storage;
+    auto storage_valid=regtl::validate(storage_model);if(!storage_valid)throw storage_valid.error();target.scheduling.register_aliases=regtl::register_aliases(storage_model);
     target.default_register_class=text(description.metadata,"default_register_class");
     if(!target.default_register_class.empty()&&!description.register_classes.contains(target.default_register_class))throw Error{Error::Code::InvalidArgument,"unknown default register class: "+target.default_register_class};
     if(auto spills=object(description.metadata,"spills"))for(auto& [klass,value]:*spills){auto c=std::get_if<Object>(&value.data);if(!c)throw Error{Error::Code::InvalidArgument,"spill class must be an object"};regtl::SpillClass model;model.klass=klass;model.load_opcode=text(*c,"load");model.store_opcode=text(*c,"store");model.address_space=text(*c,"address_space");model.size=number(text(*c,"size"));model.alignment=number(text(*c,"alignment"));model.scratch=numbers(*c,"scratch");for(auto& [key,v]:*c)if(key!="load"&&key!="store"&&key!="address_space"&&key!="size"&&key!="alignment"&&key!="scratch")throw Error{Error::Code::Unsupported,"unknown spill class property: "+key};target.spill_classes.push_back(std::move(model));}
     std::sort(target.spill_classes.begin(),target.spill_classes.end(),[](auto& a,auto& b){return a.klass<b.klass;});
     if(auto scheduling=object(description.metadata,"scheduling")) {
-      known(*scheduling,{"issue_width","resources","critical_path"},"scheduling");
+      known(*scheduling,{"issue_width","resources","critical_path","group_search_limit","verification_limit"},"scheduling");
       if(scheduling->contains("issue_width"))target.scheduling.issue_width=number(text(*scheduling,"issue_width"));
       if(auto resources=object(*scheduling,"resources"))for(auto& [name,capacity]:*resources){auto n=number(capacity.text());if(!n)throw Error{Error::Code::InvalidArgument,"zero target resource capacity"};target.scheduling.resource_capacity[name]=n;}
       target.scheduling.critical_path=boolean(*scheduling,"critical_path");
+      for(auto [key,limit]:{std::pair{"group_search_limit",&target.scheduling.group_search_limit},{"verification_limit",&target.scheduling.verification_limit}})if(scheduling->contains(key)){auto value=text(*scheduling,key);auto [end,error]=std::from_chars(value.data(),value.data()+value.size(),*limit);if(error!=std::errc{}||end!=value.data()+value.size())throw Error{Error::Code::InvalidArgument,"invalid scheduling limit: "+std::string(key)};}
     }
     std::map<std::string,Object> ordered(description.instructions.begin(),description.instructions.end());
     for(auto& [name,fields]:ordered) {
       context=machine_context+" instruction "+name;
       auto file=text(fields,"source_file");if(!file.empty())context=file+":"+text(fields,"source_line")+":"+text(fields,"source_column")+": target "+description.name+" instruction "+name;
       const auto* model=object(fields,"scheduling");if(!model)model=&fields;
-      else known(*model,{"latency","throughput","resources","issue_slots","result_latencies","implicit_result_latencies","priority","pressure_delta"},"instruction scheduling");
+      else known(*model,{"latency","memory_latency","operand_latencies","throughput","resources","issue_slots","issue_width","result_latencies","implicit_result_latencies","priority","pressure_delta"},"instruction scheduling");
       InstructionModel instruction;instruction.metadata=fields;
+      instruction.rematerializable=boolean(fields,"rematerializable");
       if(auto encoded=object(fields,"encoding_operands")) {
         auto bindings=bin2bin::encoding_operands(*encoded,context);if(!bindings)throw bindings.error();
         for(auto& [field,binding]:bindings.value()) {
@@ -61,7 +72,11 @@ Result<PipelineTarget> make_target(const unisel::MachineDescription& description
           if(!added&&it->second!=physical->second)throw Error{Error::Code::Conflict,"conflicting fixed encoding operand registers"};
         }
       }
-      auto latency=text(*model,"latency");if(!latency.empty()&&latency!="unknown"&&latency!="unspecified"&&latency!="target-dependent")instruction.latency=number(latency);
+      auto latency=text(*model,"latency");if(!latency.empty()&&latency!="unknown"&&latency!="unspecified"&&latency!="target-dependent"){
+        const auto* value=&model->at("latency");if(auto object=std::get_if<Object>(&value->data);object&&object->contains("result")){known(*object,{"result","memory"},"timing domain");value=&object->at("result");if(object->contains("memory"))instruction.memory_latency=schedrow::metadata::latency(object->at("memory"));}
+        auto range=schedrow::metadata::latency(*value);instruction.latency=range.maximum;if(range.minimum!=range.maximum)instruction.latency_range=range;
+      }
+      if(model->contains("memory_latency")){if(instruction.memory_latency)throw Error{Error::Code::Conflict,"duplicate memory latency"};instruction.memory_latency=schedrow::metadata::latency(model->at("memory_latency"));}
       auto throughput=text(*model,"throughput");if(!throughput.empty())instruction.throughput=real(throughput);
       instruction.opcode_class=text(fields,"opcode_class");instruction.semantic_class=text(fields,"semantic_class");
       instruction.barrier=boolean(fields,"barrier");instruction.memory=boolean(fields,"memory");instruction.call=boolean(fields,"call");instruction.terminator=boolean(fields,"terminator");instruction.may_trap=boolean(fields,"may_trap");
@@ -71,9 +86,11 @@ Result<PipelineTarget> make_target(const unisel::MachineDescription& description
       auto flow=text(fields,"control_flow");std::map<std::string,schedrow::ControlFlow> flows{{"",schedrow::ControlFlow::None},{"fallthrough",schedrow::ControlFlow::None},{"branch",schedrow::ControlFlow::Branch},{"conditional_branch",schedrow::ControlFlow::ConditionalBranch},{"return",schedrow::ControlFlow::Return},{"indirect_branch",schedrow::ControlFlow::IndirectBranch},{"trap",schedrow::ControlFlow::Trap},{"call",schedrow::ControlFlow::Call}};
       if(!flows.contains(flow))throw Error{Error::Code::InvalidArgument,"unknown target control flow"};instruction.control=flows.at(flow);
       instruction.implicit_defs=numbers(fields,"implicit_defs");instruction.implicit_uses=numbers(fields,"implicit_uses");instruction.issue_slots=numbers(*model,"issue_slots");
+      if(model->contains("issue_width")){instruction.issue_width=number(text(*model,"issue_width"));if(!instruction.issue_width)throw Error{Error::Code::InvalidArgument,"zero instruction issue width"};}
       instruction.early_definitions=numbers(fields,"early_definitions");
-      if(auto latencies=object(*model,"result_latencies"))for(auto& [index,cycles]:*latencies)instruction.result_latencies[number(index)]=number(cycles.text());
-      if(auto latencies=object(*model,"implicit_result_latencies"))for(auto& [reg,cycles]:*latencies)instruction.implicit_result_latencies[number(reg)]=number(cycles.text());
+      if(auto latencies=object(*model,"result_latencies"))for(auto& [index,cycles]:*latencies){auto range=schedrow::metadata::latency(cycles);if(range.minimum==range.maximum)instruction.result_latencies[number(index)]=range.maximum;else instruction.result_latency_ranges[number(index)]=range;}
+      if(auto latencies=object(*model,"implicit_result_latencies"))for(auto& [reg,cycles]:*latencies){auto range=schedrow::metadata::latency(cycles);auto id=description.physical_names.contains(reg)?description.physical_names.at(reg):number(reg);if(range.minimum==range.maximum)instruction.implicit_result_latencies[id]=range.maximum;else instruction.implicit_result_latency_ranges[id]=range;}
+      if(auto field=model->find("operand_latencies");field!=model->end()){auto array=std::get_if<metacode::Value::Array>(&field->second.data);if(!array)throw Error{Error::Code::InvalidArgument,"operand_latencies must be an array"};for(auto& v:*array){auto timing=std::get_if<Object>(&v.data);if(!timing)throw Error{Error::Code::InvalidArgument,"operand timing must be an object"};known(*timing,{"result","consumer","use","cycles","implicit"},"operand timing");bool implicit=boolean(*timing,"implicit");auto result=text(*timing,"result");auto id=implicit&&description.physical_names.contains(result)?description.physical_names.at(result):number(result);if(!timing->contains("cycles")||text(*timing,"consumer").empty())throw Error{Error::Code::InvalidArgument,"operand timing needs cycles and consumer"};instruction.operand_latencies.push_back({id,text(*timing,"consumer"),number(text(*timing,"use")),schedrow::metadata::latency(timing->at("cycles")),implicit});}}
       if(auto access=object(fields,"access")) {
         known(*access,{"read","write","volatile","atomic","address_space","alias_sets","size","alignment","ordering"},"memory access");
         schedrow::MemoryAccess memory;memory.read=boolean(*access,"read");memory.write=boolean(*access,"write");memory.volatile_access=boolean(*access,"volatile");memory.atomic=boolean(*access,"atomic");memory.address_space=text(*access,"address_space");memory.alias_sets=numbers(*access,"alias_sets");
@@ -122,6 +139,18 @@ Result<PipelineTarget> make_target(const metacode::Architecture& architecture) {
   std::map<uint32_t,std::string> names;for(auto& [name,id]:description.value().physical_names)names[id]=name;
   target.value().backend=[codec=std::move(codec.value()),bindings=std::move(bindings.value()),names=std::move(names)](const Module& module)->Result<BackendOutput> {
     const auto& region=module.materialized?module.materialized->region:module.selected;auto allocation=module.materialized?std::optional<regtl::Allocation>(module.materialized->allocation):module.allocation;auto bytes=bin2bin::encode_region(codec,bindings,names,region,module.order,allocation);if(!bytes)return Result<BackendOutput>::err(bytes.error());return Result<BackendOutput>::ok({std::move(bytes.value()),{}});
+  };
+  return target;
+}
+Result<PipelineTarget> make_target(const metacode::Architecture& architecture,const bin2bin::CodecAdapter& adapter) {
+  auto description=unisel::from_metacode(architecture);if(!description)return Result<PipelineTarget>::err(description.error());
+  auto target=make_target(description.value());if(!target)return target;
+  auto codec=bin2bin::from_metacode(architecture,adapter);if(!codec)return Result<PipelineTarget>::err(codec.error());
+  auto bindings=bin2bin::encoding_bindings(architecture);if(!bindings)return Result<PipelineTarget>::err(bindings.error());
+  std::map<uint32_t,std::string> names;for(auto& [name,id]:description.value().physical_names)names[id]=name;
+  target.value().backend=[codec=std::move(codec.value()),bindings=std::move(bindings.value()),names=std::move(names)](const Module& module)->Result<BackendOutput> {
+    const auto& region=module.materialized?module.materialized->region:module.selected;auto allocation=module.materialized?std::optional<regtl::Allocation>(module.materialized->allocation):module.allocation;
+    auto bytes=bin2bin::encode_region(codec,bindings,names,region,module.order,allocation);if(!bytes)return Result<BackendOutput>::err(bytes.error());return Result<BackendOutput>::ok({std::move(bytes.value()),{}});
   };
   return target;
 }

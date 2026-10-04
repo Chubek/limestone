@@ -5,7 +5,9 @@
 #include "limestone/runtime.h"
 #include "limestone/optimization.h"
 #include "limestone/object.h"
+#include "limestone/traceml.h"
 #include <cstring>
+#include <cstdio>
 #include <new>
 #include <vector>
 %}
@@ -35,9 +37,12 @@
 %typemap(in, numinputs=0) int32_t *OUTPUT (int32_t temp=0) { $1 = &temp; }
 %typemap(argout) int32_t *OUTPUT { $result = SWIG_AppendOutput($result, PyLong_FromLong(*$1)); }
 %apply int32_t *OUTPUT {int32_t *literal};
-%apply uint32_t *OUTPUT {uint32_t *id, uint32_t *block, uint32_t *physical, uint32_t *value};
+%apply uint32_t *OUTPUT {uint32_t *id, uint32_t *block, uint32_t *physical, uint32_t *value, uint32_t *implicit_addend};
 %apply int64_t *OUTPUT {int64_t *result};
 %apply size_t *OUTPUT {size_t *invalidated};
+%typemap(in, numinputs=0) double *OUTPUT (double temp=0) { $1 = &temp; }
+%typemap(argout) double *OUTPUT { $result = SWIG_AppendOutput($result, PyFloat_FromDouble(*$1)); }
+%apply double *OUTPUT {double *cost};
 %typemap(memberin) const char *address_space {
   char *copy = 0;
   if ($input) {
@@ -73,6 +78,21 @@
 %include "limestone/il.h"
 %include "limestone/runtime.h"
 %include "limestone/optimization.h"
+%typemap(in) (const limestone_traceml_value *const *arguments, size_t count) (std::vector<limestone_traceml_value *> items) {
+  if (!PyList_Check($input) && !PyTuple_Check($input)) SWIG_exception_fail(SWIG_TypeError, "expected TraceLambda value handles in a list or tuple");
+  Py_ssize_t length = PySequence_Size($input);
+  if (length < 0 || length > 65536) SWIG_exception_fail(SWIG_ValueError, "TraceLambda argument count outside [0,65536]");
+  try { items.resize(static_cast<size_t>(length)); } catch (...) { SWIG_exception_fail(SWIG_MemoryError, "TraceLambda argument allocation failed"); }
+  for (Py_ssize_t k = 0; k < length; ++k) {
+    PyObject *item = PySequence_GetItem($input, k); void *pointer = 0;
+    int status = item ? SWIG_ConvertPtr(item, &pointer, $descriptor(limestone_traceml_value *), 0) : SWIG_ERROR;
+    Py_XDECREF(item);
+    if (!SWIG_IsOK(status) || !pointer) SWIG_exception_fail(SWIG_TypeError, "expected a non-null TraceLambda value handle");
+    items[static_cast<size_t>(k)] = static_cast<limestone_traceml_value *>(pointer);
+  }
+  $1 = items.data(); $2 = items.size();
+}
+%include "limestone/traceml.h"
 %typemap(in, numinputs=0) uint64_t *OUTPUT (uint64_t temp=0) { $1 = &temp; }
 %typemap(argout) uint64_t *OUTPUT { $result = SWIG_AppendOutput($result, PyLong_FromUnsignedLongLong(*$1)); }
 %apply uint64_t *OUTPUT {uint64_t *address};
@@ -109,6 +129,20 @@
   }
   $1 = items.data(); $2 = items.size();
 }
+%typemap(in) (const limestone_archive *const *archives, size_t archive_count) (std::vector<limestone_archive *> items) {
+  if (!PyList_Check($input) && !PyTuple_Check($input)) SWIG_exception_fail(SWIG_TypeError, "expected archive handles in a list or tuple");
+  Py_ssize_t length = PySequence_Size($input);
+  if (length < 0 || length > 4096) SWIG_exception_fail(SWIG_ValueError, "archive count outside [0,4096]");
+  try { items.resize(static_cast<size_t>(length)); } catch (...) { SWIG_exception_fail(SWIG_MemoryError, "archive handle allocation failed"); }
+  for (Py_ssize_t k = 0; k < length; ++k) {
+    PyObject *item = PySequence_GetItem($input, k); void *pointer = 0;
+    int status = item ? SWIG_ConvertPtr(item, &pointer, $descriptor(limestone_archive *), 0) : SWIG_ERROR;
+    Py_XDECREF(item);
+    if (!SWIG_IsOK(status)) SWIG_exception_fail(SWIG_TypeError, "expected an archive handle");
+    items[static_cast<size_t>(k)] = static_cast<limestone_archive *>(pointer);
+  }
+  $1 = items.data(); $2 = items.size();
+}
 %immutable limestone_object_section::name;
 %immutable limestone_object_section::bytes;
 %immutable limestone_object_symbol::name;
@@ -124,7 +158,33 @@
   $result = $1;
   if (!$result) SWIG_fail;
 }
+%typemap(in) PyObject *callback { $1=$input; }
+%ignore limestone_python_selection_release;
+%ignore limestone_python_selection_proof;
 %inline %{
+static void limestone_python_selection_release(void *userdata) {
+  PyGILState_STATE state=PyGILState_Ensure();Py_DECREF(static_cast<PyObject *>(userdata));PyGILState_Release(state);
+}
+static limestone_status limestone_python_selection_proof(const char *context,const char *parameters,
+    int *proved,void *userdata,limestone_error *error) {
+  PyGILState_STATE state=PyGILState_Ensure();
+  PyObject *result=PyObject_CallFunction(static_cast<PyObject *>(userdata),"ss",context,parameters);
+  limestone_status status=LIMESTONE_OK;
+  if(!result){
+    PyObject *type=NULL,*value=NULL,*trace=NULL;PyErr_Fetch(&type,&value,&trace);
+    PyObject *message=value?PyObject_Str(value):NULL;const char *text=message?PyUnicode_AsUTF8(message):NULL;
+    error->code=LIMESTONE_INTERNAL;std::snprintf(error->message,sizeof(error->message),"Python selection proof: %s",text?text:"callback failed");
+    Py_XDECREF(message);Py_XDECREF(type);Py_XDECREF(value);Py_XDECREF(trace);PyErr_Clear();status=LIMESTONE_INTERNAL;
+  }else if(!PyBool_Check(result)){error->code=LIMESTONE_INVALID_ARGUMENT;std::snprintf(error->message,sizeof(error->message),"selection proof must return bool");status=LIMESTONE_INVALID_ARGUMENT;}
+  else *proved=result==Py_True;
+  Py_XDECREF(result);PyGILState_Release(state);return status;
+}
+static limestone_selection_predicate *limestone_python_selection_predicate(const char *name,PyObject *callback,limestone_error *error) {
+  if(!PyCallable_Check(callback)){error->code=LIMESTONE_INVALID_ARGUMENT;std::snprintf(error->message,sizeof(error->message),"selection proof must be callable");return NULL;}
+  Py_INCREF(callback);auto result=limestone_selection_predicate_create(name,limestone_python_selection_proof,callback,limestone_python_selection_release,error);
+  if(!result)Py_DECREF(callback);return result;
+}
+static size_t limestone_allocation_ranges_index(void) { return LIMESTONE_ALLOCATION_RANGES; }
 static PyObject *limestone_module_bytes_copy(const limestone_module *module) {
   return PyBytes_FromStringAndSize((const char *)limestone_module_bytes(module),
     (Py_ssize_t)limestone_module_byte_count(module));
@@ -166,6 +226,7 @@ static PyObject *limestone_translated_region_bytes_copy(const limestone_translat
 }
 %}
 %pythoncode %{
+LIMESTONE_ALLOCATION_RANGES = limestone_allocation_ranges_index()
 def _set_alias_sets(self, values):
     """Copy alias identities and retain their array for the descriptor lifetime."""
     array = UInt32Array(len(values))
@@ -229,6 +290,29 @@ class _Handle:
         raise TypeError("Limestone handles have unique ownership")
 
 
+class SelectionPredicate(_Handle):
+    """Owning deterministic proof over copied root/bindings/covered dictionaries."""
+    def __init__(self, name, callback):
+        import json
+        if not callable(callback):
+            raise TypeError("selection proof must be callable")
+        def prove(context, parameters):
+            return callback(json.loads(context), json.loads(parameters))
+        super().__init__(_checked_create(limestone_python_selection_predicate, name, prove), limestone_selection_predicate_destroy)
+        self.name = name
+
+    def attach_target(self, target):
+        error = limestone_error()
+        if limestone_target_set_selection_predicate(target, self.name, self._pointer(), error) != LIMESTONE_OK:
+            raise LimestoneError(error)
+
+
+def _attach_selection_predicate(function, document, predicate):
+    error = limestone_error()
+    if function(document, predicate.name, predicate._pointer(), error) != LIMESTONE_OK:
+        raise LimestoneError(error)
+
+
 class Module(_Handle):
     def __init__(self, handle):
         super().__init__(handle, limestone_module_destroy)
@@ -268,6 +352,89 @@ def compile_target(source, target, configuration=None):
 def compile_umd_file(path, options=None):
     """Load a UMD file with bounded, source-located relative includes."""
     return Module(_checked_create(limestone_compile_umd_file, str(path), options))
+
+
+def trace_options(step_limit=100000, event_limit=100000, record_trace=True, record_guards=False):
+    options = limestone_traceml_options()
+    limestone_traceml_options_default(options)
+    options.step_limit, options.event_limit = step_limit, event_limit
+    options.record_trace, options.record_guards = int(record_trace), int(record_guards)
+    return options
+
+
+def _trace_arguments(arguments):
+    if not isinstance(arguments, (list, tuple)):
+        raise TypeError("TraceLambda arguments must be a list or tuple")
+    if len(arguments) > 65536:
+        raise ValueError("TraceLambda argument count exceeds 65536")
+    values = [value if isinstance(value, TraceValue) else TraceValue(value) for value in arguments]
+    return values, [value._pointer() for value in values]
+
+
+class TraceValue(_Handle):
+    """Owning integer or immutable lexical closure; independent of its result."""
+    def __init__(self, integer=0, *, handle=None):
+        if handle is None:
+            handle = _checked_create(limestone_traceml_integer, integer)
+        super().__init__(handle, limestone_traceml_value_destroy)
+
+    @property
+    def callable(self):
+        return bool(limestone_traceml_value_callable(self._pointer()))
+
+    @property
+    def integer(self):
+        error = limestone_error()
+        status, value = limestone_traceml_value_integer(self._pointer(), error)
+        if status != LIMESTONE_OK:
+            raise LimestoneError(error)
+        return value
+
+    def apply(self, arguments=(), options=None):
+        values, handles = _trace_arguments(arguments)
+        return TraceResult(_checked_create(limestone_traceml_apply, self._pointer(), handles, options))
+
+
+class TraceGuard(_Handle):
+    """Owning guard safepoint, including lexical and continuation state."""
+    def __init__(self, handle):
+        super().__init__(handle, limestone_traceml_guard_destroy)
+
+    @property
+    def expected(self):
+        return bool(limestone_traceml_guard_expected(self._pointer()))
+
+    def resume(self, condition, options=None):
+        return TraceResult(_checked_create(limestone_traceml_resume, self._pointer(), condition, options))
+
+
+class TraceResult(_Handle):
+    def __init__(self, handle):
+        super().__init__(handle, limestone_traceml_result_destroy)
+
+    @property
+    def value(self):
+        return TraceValue(handle=_checked_create(limestone_traceml_result_value, self._pointer()))
+
+    @property
+    def trace(self):
+        return limestone_traceml_result_trace(self._pointer())
+
+    @property
+    def guards(self):
+        pointer = self._pointer()
+        return [TraceGuard(_checked_create(limestone_traceml_result_guard, pointer, index))
+                for index in range(limestone_traceml_result_guard_count(pointer))]
+
+
+class TraceRuntime(_Handle):
+    """Checked owning TraceLambda runtime; calls preserve call-by-name semantics."""
+    def __init__(self, source, node_limit=100000):
+        super().__init__(_checked_create(limestone_traceml_prepare, source, node_limit), limestone_traceml_runtime_destroy)
+
+    def invoke(self, arguments=(), options=None):
+        values, handles = _trace_arguments(arguments)
+        return TraceResult(_checked_create(limestone_traceml_invoke, self._pointer(), handles, options))
 
 
 def _matches(pointer, count, inspect, values):
@@ -356,6 +523,9 @@ class UniselDocument(_Handle):
     def analyze(self):
         return SelectionModel(_checked_create(limestone_unisel_analyze, self._pointer()))
 
+    def attach_predicate(self, predicate):
+        _attach_selection_predicate(limestone_unisel_set_selection_predicate, self._pointer(), predicate)
+
 
 class BURSSelection(_Handle):
     def __init__(self, handle):
@@ -385,6 +555,9 @@ class BURSDocument(_Handle):
 
     def analyze(self, tree=0):
         return BURSAnalysis(_checked_create(limestone_burs_analyze, self._pointer(), tree))
+
+    def attach_predicate(self, predicate):
+        _attach_selection_predicate(limestone_burs_set_selection_predicate, self._pointer(), predicate)
 
 
 class BURSAnalysis(_Handle):
@@ -424,6 +597,20 @@ class Schedule(_Handle):
     @property
     def text(self):
         return limestone_schedule_text(self._pointer())
+
+    @property
+    def slot_assignments(self):
+        pointer, error = self._pointer(), limestone_error()
+        result = []
+        for index in range(limestone_schedule_count(pointer)):
+            slots = []
+            for slot in range(limestone_schedule_slot_count(pointer, index)):
+                status, value = limestone_schedule_slot(pointer, index, slot, error)
+                if status != LIMESTONE_OK:
+                    raise LimestoneError(error)
+                slots.append(value)
+            result.append(slots)
+        return result
 
     @property
     def issues(self):
@@ -476,6 +663,14 @@ class Assignment(_Handle):
         return limestone_assignment_text(self._pointer())
 
     @property
+    def cost(self):
+        error = limestone_error()
+        status, cost = limestone_assignment_cost(self._pointer(), error)
+        if status != LIMESTONE_OK:
+            raise LimestoneError(error)
+        return cost
+
+    @property
     def registers(self):
         p, error = self._pointer(), limestone_error()
         result = {}
@@ -503,6 +698,8 @@ class AllocationDocument(_Handle):
         super().__init__(_checked_create(limestone_regtl_load, source, source_name), limestone_allocation_document_destroy)
 
     def allocate(self, unit=0, function=0, algorithm=LIMESTONE_ALLOCATE_LINEAR):
+        if function is None:
+            function = LIMESTONE_ALLOCATION_RANGES
         return Assignment(_checked_create(limestone_assignment_run, self._pointer(), unit, function, algorithm))
 
 
@@ -540,6 +737,10 @@ class BinaryArchitecture(_Handle):
 class Optimization(_Handle):
     def __init__(self, handle):
         super().__init__(handle, limestone_optimization_destroy)
+
+    @property
+    def used_fallback(self):
+        return bool(limestone_optimization_used_fallback(self._pointer()))
 
     @property
     def expression(self):
@@ -703,10 +904,39 @@ class ObjectTarget(_Handle):
     def from_module(self, module, symbol):
         return ObjectFile(handle=_checked_create(limestone_module_object, module._pointer(), self._pointer(), symbol))
 
-    def link(self, objects, base_address=0, max_size=64*1024*1024, externals=None):
+    def link(self, objects, base_address=0, max_size=64*1024*1024, externals=None, archives=()):
         handles = [object._pointer() for object in objects]
-        return LinkedImage(_checked_create(limestone_object_link, self._pointer(), handles, base_address,
+        libraries = [archive._pointer() for archive in archives]
+        return LinkedImage(_checked_create(limestone_archive_link, self._pointer(), handles, libraries, base_address,
                            max_size, {} if externals is None else externals))
+
+
+class ObjectArchive(_Handle):
+    """Owning ar archive with independent member snapshots."""
+    def __init__(self, data=None, source_name=None):
+        handle = (_checked_create(limestone_archive_create) if data is None else
+                  _checked_create(limestone_archive_load, bytes(data), source_name))
+        super().__init__(handle, limestone_archive_destroy)
+
+    def add(self, name, object):
+        error = limestone_error()
+        if limestone_archive_add_member(self._pointer(), name, object._pointer(), error) != LIMESTONE_OK:
+            raise LimestoneError(error)
+
+    @property
+    def names(self):
+        return [limestone_archive_member_name(self._pointer(), index)
+                for index in range(limestone_archive_member_count(self._pointer()))]
+
+    def member(self, index):
+        return ObjectFile(handle=_checked_create(limestone_archive_get_member, self._pointer(), index))
+
+    def emit(self):
+        handle = _checked_create(limestone_archive_emit, self._pointer())
+        try:
+            return limestone_object_data_bytes_copy(handle)
+        finally:
+            limestone_object_data_destroy(handle)
 
 
 class ObjectFile(_Handle):
@@ -718,6 +948,10 @@ class ObjectFile(_Handle):
     @property
     def text(self):
         return limestone_object_text(self._pointer())
+
+    @property
+    def elf_class(self):
+        return limestone_object_elf_class(self._pointer())
 
     def emit(self):
         handle = _checked_create(limestone_object_emit_elf, self._pointer())
@@ -742,13 +976,25 @@ class ObjectFile(_Handle):
             raise LimestoneError(error)
         return id
 
-    def add_relocation(self, section, symbol, type, offset, addend=0):
+    def add_relocation(self, section, symbol, type, offset, addend=0, *, implicit_addend=False):
         relocation = limestone_object_relocation()
         relocation.section, relocation.symbol, relocation.type = section, symbol, type
         relocation.offset, relocation.addend = offset, addend
         error = limestone_error()
-        if limestone_object_add_relocation(self._pointer(), relocation, error) != LIMESTONE_OK:
+        if limestone_object_add_relocation_ex(self._pointer(), relocation, int(implicit_addend), error) != LIMESTONE_OK:
             raise LimestoneError(error)
+
+    @property
+    def relocations(self):
+        result = []
+        for index in range(limestone_object_relocation_count(self._pointer())):
+            relocation, error = limestone_object_relocation(), limestone_error()
+            status, implicit = limestone_object_get_relocation_ex(self._pointer(), index, relocation, error)
+            if status != LIMESTONE_OK:
+                raise LimestoneError(error)
+            result.append(dict(section=relocation.section, symbol=relocation.symbol, type=relocation.type,
+                          offset=relocation.offset, addend=relocation.addend, implicit_addend=bool(implicit)))
+        return result
 
     @property
     def sections(self):

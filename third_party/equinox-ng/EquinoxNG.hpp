@@ -413,9 +413,20 @@ struct RunnerConfig {
 // Main EGraph
 // ============================================================
 
+// Optional host hooks used by Limestone. Checks occur at safe loop boundaries;
+// observers expose value IDs rather than pointers into the graph's containers.
+struct OperationInterrupted : std::runtime_error {
+    OperationInterrupted() : std::runtime_error("e-graph operation interrupted") {}
+};
 class EGraph {
 public:
     EGraph() = default;
+    using NodeObserver = std::function<void(ENodeId, EClassId, ENode const&)>;
+    using MergeObserver = std::function<void(EClassId, EClassId, EClassId, std::optional<ENodeId>, std::optional<ENodeId>)>;
+    void set_interrupt(std::function<bool()> stop) { interrupt_ = std::move(stop); }
+    void set_observers(NodeObserver node, MergeObserver merge) {
+        node_observer_ = std::move(node); merge_observer_ = std::move(merge);
+    }
 
     // ----------------------------
     // Core insertion
@@ -424,8 +435,11 @@ public:
     EClassId add(Term const& t) {
         return add_term(t);
     }
+    // Host adapters can retain per-term provenance while the engine remains
+    // authoritative for canonicalization, hash-consing and ownership.
+    EClassId add_node(ENode node) { return add_enode(std::move(node)); }
 
-    EClassId merge(EClassId a, EClassId b) {
+    EClassId merge(EClassId a, EClassId b, std::optional<ENodeId> left = {}, std::optional<ENodeId> right = {}) {
         a = find(a);
         b = find(b);
         if (a == b) return a;
@@ -441,6 +455,7 @@ public:
 
         ++stats_.unions_performed;
         changed_ = true;
+        if (merge_observer_) merge_observer_(a, b, root, left, right);
         return root;
     }
 
@@ -467,12 +482,14 @@ public:
         // per-class worklists and parent-use indexes by operator.
         bool local_change = true;
         while (local_change) {
+            poll();
             local_change = false;
 
             std::unordered_map<ENode, ENodeId> new_memo;
             new_memo.reserve(enodes_.size() * 2 + 1);
 
             for (ENodeId nid{0}; nid.value < enodes_.size(); ++nid.value) {
+                poll();
                 auto node = enodes_[nid.value];
                 for (auto& c : node.children) {
                     c = find(c);
@@ -489,7 +506,7 @@ public:
                     auto r1 = find(owner1);
                     auto r2 = find(owner2);
                     if (r1 != r2) {
-                        merge(r1, r2);
+                        merge(r1, r2, nid, existing);
                         local_change = true;
                     }
                 }
@@ -523,12 +540,14 @@ public:
         // Match rule over all current representative classes.
         std::unordered_set<std::uint32_t> reps_seen;
         for (std::uint32_t i = 0; i < classes_.size(); ++i) {
+            poll();
             EClassId eid{i};
             auto rep = find(eid);
             if (!reps_seen.insert(rep.value).second) continue;
 
             auto matches = match(rule.lhs, rep);
             for (auto const& subst : matches) {
+                poll();
                 if (rule.condition && !rule.condition(subst)) {
                     continue;
                 }
@@ -540,11 +559,11 @@ public:
                 if (lrep != rrep) {
                     merge(lrep, rrep);
                     ++applied;
+                    ++stats_.rewrites_applied;
                 }
             }
         }
 
-        stats_.rewrites_applied += applied;
         return applied;
     }
 
@@ -614,10 +633,12 @@ public:
         bool changed = true;
         std::size_t rounds = 0;
         while (changed && rounds++ < classes_.size() + enodes_.size() + 8) {
+            poll();
             changed = false;
 
             std::unordered_set<std::uint32_t> reps_seen;
             for (std::uint32_t i = 0; i < classes_.size(); ++i) {
+                poll();
                 EClassId eid{i};
                 auto rep = find(eid);
                 if (!reps_seen.insert(rep.value).second) continue;
@@ -626,6 +647,7 @@ public:
                 Best cand_best = best[rep.value];
 
                 for (auto nid : ec.nodes) {
+                    poll();
                     auto const& n = enodes_.at(nid.value);
 
                     if (n.is_literal()) {
@@ -712,6 +734,10 @@ private:
     std::unordered_map<ENode, ENodeId> memo_;  // canonical enode -> enode id
     RunnerStats stats_{};
     bool changed_ = false;
+    std::function<bool()> interrupt_;
+    NodeObserver node_observer_;
+    MergeObserver merge_observer_;
+    void poll() { if (interrupt_ && interrupt_()) throw OperationInterrupted{}; }
 
     // ----------------------------
     // Allocation helpers
@@ -759,6 +785,7 @@ private:
         }
 
         changed_ = true;
+        if (node_observer_) node_observer_(nid, eid, enodes_.at(nid.value));
         return eid;
     }
 
@@ -785,6 +812,7 @@ private:
     // ----------------------------
 
     void match_in_class(Term const& pat, EClassId eid, Subst subst, std::vector<Subst>& out) {
+        poll();
         eid = find(eid);
 
         if (pat.is_var()) {
@@ -802,6 +830,7 @@ private:
         auto const& ec = classes_.at(eid.value);
 
         for (auto nid : ec.nodes) {
+            poll();
             auto const& n = enodes_.at(nid.value);
 
             if (pat.is_lit()) {
@@ -864,17 +893,20 @@ private:
     void rebuild_classes_from_owner() {
         std::vector<std::vector<ENodeId>> grouped(classes_.size());
         for (ENodeId nid{0}; nid.value < owner_.size(); ++nid.value) {
+            poll();
             owner_[nid.value] = find(owner_[nid.value]);
             grouped[owner_[nid.value].value].push_back(nid);
         }
 
         for (std::uint32_t i = 0; i < classes_.size(); ++i) {
+            poll();
             classes_[i].id = EClassId{i};
             classes_[i].nodes = std::move(grouped[i]);
             classes_[i].parents.clear();
         }
 
         for (ENodeId nid{0}; nid.value < enodes_.size(); ++nid.value) {
+            poll();
             auto const& node = enodes_[nid.value];
             auto own = owner_[nid.value];
             for (auto child : node.children) {

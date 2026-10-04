@@ -7,6 +7,21 @@ int main(){return test_main([]{
   CHECK(take(session.load_rules("(rule zero (add ?x 0) ?x)"))==1);
   auto optimized=take(session.saturate("(add (add x 0) 0)"));
   CHECK(optimized.expression=="x"&&optimized.cost==1&&optimized.saturated&&optimized.rewrites>=2&&!optimized.trace.empty());
+  CHECK(optimized.derivation_nodes.size()==optimized.nodes&&!optimized.derivation_steps.empty());
+  CHECK(std::any_of(optimized.derivation_steps.begin(),optimized.derivation_steps.end(),[](auto& step){return step.rule=="zero"&&!step.bindings.empty();}));
+  CHECK(print_derivation(take(session.saturate("(add (add x 0) 0)")))==print_derivation(optimized));
+  auto located=take(session.saturate(take(parse_term("(add\n (add x 0)\n 0)","origins.term"))));
+  auto literal=std::find_if(located.derivation_nodes.begin(),located.derivation_nodes.end(),[](auto& node){return node.constant==0;});CHECK(literal!=located.derivation_nodes.end()&&literal->location.line==2&&literal->origins.size()==2&&literal->origins.back().line==3);
+  Session congruence;take(congruence.load_rules("(operator add 2) (operator wrap 1) (operator pair 2) (rule zero (add ?x 0) ?x)"));
+  auto witnesses=take(congruence.saturate("(pair (wrap (add x 0)) (wrap x))"));
+  CHECK(std::any_of(witnesses.derivation_steps.begin(),witnesses.derivation_steps.end(),[](auto& step){return step.rule.empty()&&step.lhs_node&&step.rhs_node;}));
+  bool saw_partial=false;
+  for(size_t stop=1;stop<180;++stop) {
+    size_t checks=0;Limits limit;limit.cancelled=[&]{return ++checks==stop;};auto result=take(session.saturate("(add (add (add x 0) 0) 0)",limit));
+    auto committed=std::count_if(result.derivation_steps.begin(),result.derivation_steps.end(),[](auto& step){return !step.rule.empty();});CHECK(result.rewrites==size_t(committed));
+    if(result.graph_discarded){CHECK(result.limit_reached&&!result.saturated&&result.expression=="(add (add (add x 0) 0) 0)"&&checks==stop);saw_partial|=result.rewrites>0;}
+  }
+  CHECK(saw_partial);
   for(int i=0;i<5;++i)CHECK(take(session.saturate("(add (add x 0) 0)")).expression==optimized.expression);
   CHECK(take(session.saturate("(add 2 3)")).expression=="(add 2 3)");
   auto before=session.rules().size();fails(session.load_rules("(rule unbound (add ?x 0) ?y)"),Error::Code::InvalidArgument);CHECK(session.rules().size()==before);
@@ -56,12 +71,19 @@ int main(){return test_main([]{
   Term deep{"leaf"};for(int i=0;i<258;++i)deep=Term{"copy",{},{},{std::move(deep)}};
   fails(declared.saturate(deep),Error::Code::ResourceLimit);
   Limits quiet;quiet.trace=false;CHECK(take(declared.saturate("(copy payload)",quiet)).trace.empty());
+  CHECK(take(declared.saturate("(copy payload)",quiet)).derivation_nodes.empty());
+  size_t polls=0;Limits interrupted;interrupted.cancelled=[&]{return ++polls==4;};auto preempted=take(declared.saturate("(copy payload)",interrupted));CHECK(preempted.limit_reached&&preempted.expression=="(copy payload)"&&polls==4);
 
   Session macros;
   take(macros.load_rules("; @unknown(directive) is only a comment\n@define(ZERO, 0)\n(operator add 2)\n(rule zero (add ?x &ZERO()) ?x)","macros.tuner"));
   CHECK(take(macros.saturate("(add x 0)")).expression=="x");
   CHECK(take(macros.saturate("(add x 0)")).trace.front().find("[expanded]")!=std::string::npos);
   CHECK(macros.rules().front().location.file=="macros.tuner"&&macros.rules().front().location.expanded);
+  CHECK(macros.rules().front().location.line==4&&macros.rules().front().location.expanded_offset);
+  CHECK(macros.rules().front().lhs.arguments[1].location.line==4&&macros.rules().front().lhs.arguments[1].location.column==20);
+  auto macro_error=macros.load_rules("@define(LONG, (unknown ?x))\n(rule bad &LONG() ?x)","mapped.tuner");fails(macro_error,Error::Code::InvalidArgument);CHECK(macro_error.error().message.find("mapped.tuner [expanded]:2:11:")!=std::string::npos);
+  auto lex_error=macros.load_rules("@define(ZERO, 0)\n(rule bad (add ?x &ZERO()) ?x)\n)","lexical.tuner");fails(lex_error,Error::Code::Parse);CHECK(lex_error.error().message.find("lexical.tuner [expanded]:3:1:")!=std::string::npos);
+  auto copied_error=macros.load_rules("@define(LONG, (add (add ?x 0) 0))\n(rule bad &LONG() ?x))","copied.tuner");fails(copied_error,Error::Code::Parse);CHECK(copied_error.error().message.find("copied.tuner [expanded]:2:22:")!=std::string::npos);
   fails(macros.load_rules("(rule missing (add ?x &ZERO()) ?x)"),Error::Code::Parse);
   CHECK(macros.rules().size()==1);
   fails(macros.load_rules("(rule missing (add ?x $UNKNOWN{}) ?x)"),Error::Code::Parse);

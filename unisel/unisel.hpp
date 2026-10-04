@@ -13,7 +13,8 @@ struct Node {
    std::optional<schedrow::MemoryAccess> access;
     bool call=false, terminator=false, may_trap=false;
     std::vector<uint32_t> block_targets;
-    schedrow::ControlFlow control=schedrow::ControlFlow::None;
+     schedrow::ControlFlow control=schedrow::ControlFlow::None;
+     metacode::OperandMetadata metadata;
 };
 struct PatternTree {
   // Empty op is a boundary operand; binding enforces repeated operand identity.
@@ -29,7 +30,11 @@ struct Pattern {
   std::optional<PatternTree> tree;
   bool supports_side_effects=false;
    std::string origin;
-   std::vector<metacode::OperandConstraint> constraints;
+    std::vector<metacode::OperandConstraint> constraints;
+     std::vector<metacode::HostConstraint> host_constraints;
+     // Resulting memory summary is justified by the named host proof over all
+     // covered accesses. Multiple source accesses cannot be merged implicitly.
+     std::optional<schedrow::MemoryAccess> fused_memory;
 };
 struct Candidate {
   PatternId pattern; NodeId root; std::vector<NodeId> covered; int cost; std::string reason;
@@ -47,6 +52,7 @@ Result<Program> prepare(const Program&);
 // Signed, 1-based literals. This inspectable model contains no vendor types.
 struct ConstraintModel { std::vector<Candidate> candidates; std::vector<std::vector<int32_t>> clauses; };
 std::vector<Candidate> match(const Program&, const std::vector<Pattern>&);
+Result<std::vector<Candidate>> match_checked(const Program&,const std::vector<Pattern>&);
 Result<int> validate(const Program&, const std::vector<Pattern>&);
 Result<ConstraintModel> build_model(const Program&, const std::vector<Pattern>&);
 Result<Selection> solve(const Program&, const std::vector<Pattern>&);

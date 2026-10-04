@@ -118,6 +118,7 @@ std::vector<uint8_t> encode_form(const Architecture& a,const EncodingForm& f,con
 Result<int> validate(const Architecture& a) {
   try {
     if(a.name.empty())fail("architecture has no identity");
+    if(a.codec&&(a.codec->identity.empty()||!a.codec->decode_one||!a.codec->encode_form||!a.codec->max_instruction_bytes||a.codec->max_instruction_bytes>1048576||a.forms.empty()))fail("native codec requires complete owning callbacks, forms and bounds");
     if(a.forms.empty()) {
       for(auto& [opcode,name]:a.opcodes)if(name.empty())fail("empty byte instruction mnemonic");
       for(auto [opcode,status]:a.status)if(!a.opcodes.contains(opcode)||status<Status::Supported||status>Status::Ambiguous)fail("invalid byte instruction translation status");
@@ -128,20 +129,21 @@ Result<int> validate(const Architecture& a) {
     std::set<uint32_t> ids;
     for(auto& f:a.forms) {
       if(f.status<Status::Supported||f.status>Status::Ambiguous||f.control<ControlFlow::Fallthrough||f.control>ControlFlow::Trap)fail("invalid encoding semantic classification");
-      if(!ids.insert(f.id).second||f.mnemonic.empty()||!f.width||f.width>64||f.width%8)fail("invalid encoding form identity or width");
-      if((f.base&~f.mask)||(f.mask&~bits(f.width)))fail("encoding base/mask outside fixed bits");
+      if(!ids.insert(f.id).second||f.mnemonic.empty()||!f.width||(!a.codec&&f.width>64)||(a.codec&&f.width/8>a.codec->max_instruction_bytes)||f.width%8)fail("invalid encoding form identity or width");
+      if(a.codec&&(f.mask||f.base))fail("native forms use adapter-owned encoding, not masked bits");
+      if(!a.codec&&((f.base&~f.mask)||(f.mask&~bits(f.width))))fail("encoding base/mask outside fixed bits");
       uint64_t covered=f.mask;std::set<std::string> names;
       for(auto& field:f.fields) {
         if(field.kind<OperandKind::Unsigned||field.kind>OperandKind::PCRelative)fail("unknown encoding field kind");
-        if(field.name.empty()||!names.insert(field.name).second||!field.width||field.width>64||field.lsb>=f.width||field.width>f.width-field.lsb||!field.scale)fail("invalid encoding field: "+field.name);
-        auto mask=bits(field.width)<<field.lsb;if(covered&mask)fail("overlapping encoding field: "+field.name);covered|=mask;
+        if(field.name.empty()||!names.insert(field.name).second||!field.width||field.width>64||(!a.codec&&(field.lsb>=f.width||field.width>f.width-field.lsb))||(a.codec&&field.lsb)||!field.scale)fail("invalid encoding field: "+field.name);
+        if(!a.codec){auto mask=bits(field.width)<<field.lsb;if(covered&mask)fail("overlapping encoding field: "+field.name);covered|=mask;}
         if(field.kind==OperandKind::Register) {
           auto regs=a.registers.find(field.register_class);if(regs==a.registers.end()||regs->second.empty())fail("missing register encoding class: "+field.register_class);
           std::set<std::string> register_names;for(auto& [n,name]:regs->second)if(n>bits(field.width)||name.empty()||!register_names.insert(name).second)fail("invalid register encoding table");
         }else if(!field.register_class.empty())fail("non-register field has register class");
         if(field.kind!=OperandKind::PCRelative&&(field.scale!=1||!field.relative_to_end))fail("PC policy on non-branch field");
       }
-      if(covered!=bits(f.width))fail("encoding contains undescribed bits",Error::Code::Unsupported);
+      if(!a.codec&&covered!=bits(f.width))fail("encoding contains undescribed bits",Error::Code::Unsupported);
       bool direct=f.control==ControlFlow::Branch||f.control==ControlFlow::ConditionalBranch||f.control==ControlFlow::Call;
       if(direct!=!f.target_operand.empty()||(direct&&!names.contains(f.target_operand)))fail("invalid branch target contract");
       if(direct){auto field=std::find_if(f.fields.begin(),f.fields.end(),[&](auto& x){return x.name==f.target_operand;});if(field->kind!=OperandKind::PCRelative&&field->kind!=OperandKind::Unsigned)fail("branch target must be absolute or PC-relative");}
@@ -153,7 +155,7 @@ Result<int> validate(const Architecture& a) {
     }
     // Prefix-free masks make instruction boundaries unambiguous, including
     // mixed-width encodings. No longest-match guess is used.
-    for(size_t x=0;x<a.forms.size();++x)for(size_t y=x+1;y<a.forms.size();++y) {
+    if(!a.codec)for(size_t x=0;x<a.forms.size();++x)for(size_t y=x+1;y<a.forms.size();++y) {
       auto& p=a.forms[x];auto& q=a.forms[y];bool compatible=true;
       for(uint32_t k=0;k<std::min(p.width,q.width)/8;++k) {
         auto ps=8*(a.endianness=="little"?k:p.width/8-k-1),qs=8*(a.endianness=="little"?k:q.width/8-k-1);
@@ -169,12 +171,13 @@ Result<std::vector<uint8_t>> encode(const Architecture& a,std::string_view mnemo
   auto checked=validate(a);if(!checked)return Result<std::vector<uint8_t>>::err(checked.error());
   auto alternatives=forms(a);std::sort(alternatives.begin(),alternatives.end(),[](auto& x,auto& y){return std::tie(x.width,x.id)<std::tie(y.width,y.id);});
   std::optional<Error> rejected;
-  for(auto& f:alternatives)if(f.mnemonic==mnemonic)try{return Result<std::vector<uint8_t>>::ok(encode_form(a,f,operands,address));}catch(const Error& e){rejected=e;}
+  for(auto& f:alternatives)if(f.mnemonic==mnemonic){if(a.codec){auto encoded=detail::encode_native(a,f.id,operands,address);if(encoded)return encoded;rejected=encoded.error();}else try{return Result<std::vector<uint8_t>>::ok(encode_form(a,f,operands,address));}catch(const Error& e){rejected=e;}}
   return Result<std::vector<uint8_t>>::err(rejected.value_or(Error{Error::Code::NotFound,"unknown encoding mnemonic: "+std::string(mnemonic)}));
 }
 
 Result<std::vector<uint8_t>> encode_form(const Architecture& a,uint32_t id,const std::map<std::string,std::string>& operands,uint64_t address) {
   auto valid=validate(a);if(!valid)return Result<std::vector<uint8_t>>::err(valid.error());
+  if(a.codec)return detail::encode_native(a,id,operands,address);
   try{auto alternatives=forms(a);auto found=std::find_if(alternatives.begin(),alternatives.end(),[&](auto& f){return f.id==id;});if(found==alternatives.end())fail("unknown encoding form",Error::Code::NotFound);return Result<std::vector<uint8_t>>::ok(encode_form(a,*found,operands,address));}catch(const Error& e){return Result<std::vector<uint8_t>>::err(e);}
 }
 
@@ -265,16 +268,16 @@ Result<std::string> semantics(const Architecture& a,const Instruction& instructi
 }
 Result<std::vector<uint8_t>> translate_masked(const Architecture& src,const Architecture& dst,std::span<const uint8_t> bytes,const TranslationOptions& options) {
   try {
-    if(src.state_model.empty()||src.state_model!=dst.state_model||src.execution_domain.empty()||src.execution_domain!=dst.execution_domain)fail("translation requires matching explicit execution/state models",Error::Code::Unsupported);
+    if(!compatible_states(src,dst,options))fail("translation requires matching or explicitly adapted execution/state models",Error::Code::Unsupported);
     auto valid=validate(dst);if(!valid)return Result<std::vector<uint8_t>>::err(valid.error());
-    auto decoded=decode(src,bytes,options.source_address);if(!decoded)return Result<std::vector<uint8_t>>::err(decoded.error());
+    auto region=transformed_region(src,bytes,options);if(!region)return Result<std::vector<uint8_t>>::err(region.error());
     struct Alternative {EncodingForm encoding;std::map<std::string,std::string> operands;};
     struct Plan {std::vector<Alternative> alternatives;size_t chosen=0;uint64_t address=0;};
     auto targets=forms(dst);std::sort(targets.begin(),targets.end(),[](auto& a,auto& b){return std::tie(a.width,a.id)<std::tie(b.width,b.id);});
     std::vector<Plan> plans;std::map<uint64_t,uint64_t> addresses;
-    for(auto& i:decoded.value()) {
+    for(auto& i:region.value().instructions) {
       if(i.status!=Status::Supported)fail("unsupported source instruction at "+std::to_string(i.address),Error::Code::Unsupported);
-      auto semantic=i.encoding_id?semantics(src,i):Result<std::string>::ok(src.semantics.contains(i.opcode)?src.semantics.at(i.opcode):"");if(!semantic)return Result<std::vector<uint8_t>>::err(semantic.error());auto equivalent=transformed_semantics(options,{i.address,semantic.value(),i.status,i.control,i.branch_target});if(!equivalent)return Result<std::vector<uint8_t>>::err(equivalent.error());auto input=parse(equivalent.value());
+      auto equivalent=transformed_semantics(options,i);if(!equivalent)return Result<std::vector<uint8_t>>::err(equivalent.error());auto input=parse(equivalent.value());
       Plan plan;
       for(auto& f:targets)if(f.status==Status::Supported&&f.control==i.control&&!f.semantics.empty()) {
         std::map<std::string,std::string> operands;if(!match(parse(f.semantics),input,operands))continue;
@@ -282,7 +285,7 @@ Result<std::vector<uint8_t>> translate_masked(const Architecture& src,const Arch
         // Probe non-target operands without prematurely committing to a branch
         // displacement. Final form selection follows layout and address remapping.
         auto probe=operands;if(!f.target_operand.empty()){auto field=std::find_if(f.fields.begin(),f.fields.end(),[&](auto& n){return n.name==f.target_operand;});probe[f.target_operand]=std::to_string(field->kind==OperandKind::PCRelative&&field->relative_to_end?f.width/8:0);}
-        try{encode_form(dst,f,probe,0);}catch(const Error&){continue;}
+         if(!bin2bin::encode_form(dst,f.id,probe,0))continue;
         plan.alternatives.push_back({f,std::move(operands)});
       }
       if(plan.alternatives.empty())fail("no semantically equivalent target encoding at "+std::to_string(i.address),Error::Code::Unsupported);plans.push_back(std::move(plan));
@@ -290,20 +293,20 @@ Result<std::vector<uint8_t>> translate_masked(const Architecture& src,const Arch
     bool promoted=true;
     while(promoted) {
       promoted=false;uint64_t address=options.target_address;addresses.clear();
-      for(size_t k=0;k<plans.size();++k){auto& p=plans[k];auto& f=p.alternatives[p.chosen].encoding;p.address=address;addresses[decoded.value()[k].address]=address;if(f.width/8>UINT64_MAX-address)fail("translated address overflow");address+=f.width/8;}
-      addresses[options.source_address+bytes.size()]=address;
+      for(auto& p:plans){auto& f=p.alternatives[p.chosen].encoding;p.address=address;if(f.width/8>UINT64_MAX-address)fail("translated address overflow");address+=f.width/8;}
+      for(auto [label,index]:region.value().boundaries)addresses[label]=index==plans.size()?address:plans[index].address;
       std::vector<uint8_t> out;
       for(size_t k=0;k<plans.size();++k) {
-        auto& p=plans[k];const auto& i=decoded.value()[k];bool found=false;std::optional<Error> rejected;
+        auto& p=plans[k];const auto& i=region.value().instructions[k];bool found=false;std::optional<Error> rejected;
         for(size_t choice=p.chosen;choice<p.alternatives.size();++choice) {
           auto& alternative=p.alternatives[choice];auto operands=alternative.operands;
           if(i.branch_target) {
             auto target=*i.branch_target;
-            if(target>=options.source_address&&target<=options.source_address+bytes.size()) {
+            if(addresses.contains(target)|| (target>=options.source_address&&target<=options.source_address+bytes.size())) {
               if(!addresses.contains(target))fail("branch target is not an instruction boundary",Error::Code::Conflict);operands[alternative.encoding.target_operand]=std::to_string(addresses.at(target));
             }
           }
-          try{auto encoded=encode_form(dst,alternative.encoding,operands,p.address);if(choice!=p.chosen){p.chosen=choice;promoted=true;}out.insert(out.end(),encoded.begin(),encoded.end());found=true;break;}catch(const Error& e){rejected=e;}
+           auto encoded=bin2bin::encode_form(dst,alternative.encoding.id,operands,p.address);if(!encoded){rejected=encoded.error();continue;}if(choice!=p.chosen){p.chosen=choice;promoted=true;}out.insert(out.end(),encoded.value().begin(),encoded.value().end());found=true;break;
         }
         if(!found){if(promoted)break;throw rejected.value_or(Error{Error::Code::Unsupported,"no encodable branch form"});}
       }

@@ -223,6 +223,24 @@ EXL_DEF int exl_native_type_struct(const exl_native_type_t *const *fields,size_t
  * @note Arrays cannot be top-level call arguments/results: C decays arguments
  * to pointers. Pass an explicit pointer or embed the array in a struct. */
 EXL_DEF int exl_native_type_array(const exl_native_type_t *element,size_t count,exl_native_type_t **output);
+/** @brief Explicit compiler/ABI-supplied layout for a custom data adapter.
+ * Identity names the complete layout and ABI version. Offsets may overlap (unions)
+ * or be unaligned (packed fields); bitfield/vector semantics remain in the adapter.
+ * The complete representation includes padding and requires size % alignment == 0. */
+typedef struct exl_custom_layout {
+  const char *identity;
+  size_t size,alignment;
+  const size_t *field_offsets;
+  size_t field_count;
+} exl_custom_layout_t;
+/** @brief Create an owning packed/over-aligned/union/bitfield/vector layout.
+ * @param layout Borrowed explicit layout, copied on success.
+ * @param output Owning handle output, unchanged on failure.
+ * @return 0 success, -1 malformed, -3 allocation failure.
+ * @note Custom layouts work through exl_register_data_adapter, independently of
+ * libffi. Direct native registration rejects them with -4. They do not imply an
+ * ABI classification and cannot be nested in automatically classified structs. */
+EXL_DEF int exl_native_type_custom(const exl_custom_layout_t *layout,exl_native_type_t **output);
 /** @brief Release this owning type handle. NULL is allowed; registrations and
  * parent types retain their snapshots. Synchronize shared-handle destruction.
  * @param type Handle to destroy. */
@@ -239,7 +257,7 @@ EXL_DEF int exl_native_type_layout(const exl_native_type_t *type,size_t *size,si
  * @param offset Caller-owned offset, unchanged on failure.
  * @return 0 success, -1 invalid kind/index/output. */
 EXL_DEF int exl_native_type_offset(const exl_native_type_t *type,size_t index,size_t *offset);
-/** @brief Exact nonvariadic native data signature, copied on registration.
+/** @brief Exact native data call shape, copied on registration.
  * @var result_type Borrowed type, including an explicit VOID descriptor.
  * @var argument_types Borrowed complete non-VOID, non-array type handles.
  * @var argument_count Number of arguments, at most EXL_NATIVE_MAX_ARGS. */
@@ -253,6 +271,31 @@ typedef struct exl_data_signature {
  * @var size Exact registered type size including padding. Pointer representations
  * hold borrowed host pointers; pointed-to storage is not copied or owned. */
 typedef struct exl_data_argument { const void *data;size_t size; } exl_data_argument_t;
+/** @brief Synchronous compiled bridge for exact custom native data shapes.
+ * Arguments and result are aligned owning temporary copies, borrowed for the call.
+ * The bridge uses its compiler's typed ABI and contains foreign exceptions before
+ * returning 0 or -1/-2/-3/-4 with an optional bounded diagnostic. Result bytes are
+ * committed only on 0. C++ bridge exceptions are contained as -3 by Exolayer. */
+typedef int (*exl_data_adapter_fn)(const exl_data_argument_t *arguments,size_t count,
+  void *result,size_t result_size,void *userdata,char *error,size_t error_capacity);
+/** @brief Release adopted adapter userdata after the last registration/call owner. */
+typedef void (*exl_data_adapter_release_fn)(void *userdata);
+/** @brief Register an owning compiler/ABI-specific bridge, experimentally.
+ * @param context Synchronized owning context; synchronous reentrancy is supported.
+ * @param name Copied unique registry name.
+ * @param function Bridge implementing the complete registered native shape.
+ * @param userdata Adopted only on success; retained through active calls.
+ * @param release Optional destructor invoked after the last owner is released.
+ * @param signature Copied exact owning type snapshots, including custom layouts.
+ * @return 0 success, -1 invalid, -2 duplicate, -3 allocation failure.
+ * @note Native calling-convention/classification and exception translation belong
+ * to the explicitly compiled bridge. No target ABI or promotion is inferred. */
+EXL_DEF int exl_register_data_adapter(exl_context_t *context,const char *name,
+  exl_data_adapter_fn function,void *userdata,exl_data_adapter_release_fn release,const exl_data_signature_t *signature);
+/** @brief Remove a registration. Active calls retain code/type/userdata snapshots.
+ * @return 0 success, -1 invalid, -2 missing, -3 failure. Library ownership is retained
+ * by its context until close. Context destruction from an active call is forbidden. */
+EXL_DEF int exl_unregister(exl_context_t *context,const char *name);
 /** @brief Register a scalar/aggregate by-value function, experimentally.
  * @param context Registry owning prepared interface and type snapshots.
  * @param name Copied unique registry name.
@@ -264,6 +307,19 @@ typedef struct exl_data_argument { const void *data;size_t size; } exl_data_argu
  * interface. Input/result layouts are checked independently by the native adapter. */
 EXL_DEF int exl_register_native_data(exl_context_t *context,const char *name,exl_native_address_t function,
   const exl_data_signature_t *signature,exl_callconv_t convention);
+/** @brief Prepare one exact variadic scalar/aggregate data call shape.
+ * @param context Registry owning the prepared interface and type snapshots.
+ * @param name Copied unique registry name.
+ * @param function Borrowed native address; code must outlive registration.
+ * @param signature Complete argument/result shape, copied with type ownership.
+ * @param fixed_argument_count Named argument count, from 1 through total count.
+ * @param convention Explicit host C ABI; stdcall/fastcall are unsupported.
+ * @return 0 success, -1 invalid/unpromoted type, -2 duplicate, -3 failure, -4 unsupported.
+ * @note Ellipsis scalars must already be C-promoted. Structs, including nested
+ * records and arrays, retain their exact layout without field-wise promotions.
+ * Uses exl_call_data and the same ownership and exception rules as fixed calls. */
+EXL_DEF int exl_register_native_data_variadic(exl_context_t *context,const char *name,exl_native_address_t function,
+  const exl_data_signature_t *signature,size_t fixed_argument_count,exl_callconv_t convention);
 /** @brief Resolve a library symbol and register an owning data-call interface.
  * @param context Owning registry.
  * @param library Live context-owned loader; retained through active calls.
@@ -275,6 +331,19 @@ EXL_DEF int exl_register_native_data(exl_context_t *context,const char *name,exl
  * @note Reentrant library close is rejected during an active call. */
 EXL_DEF int exl_library_bind_data(exl_context_t *context,exl_library_t *library,const char *name,
   const char *symbol,const exl_data_signature_t *signature,exl_callconv_t convention);
+/** @brief Bind a library symbol with an owning variadic data-call shape.
+ * @param context Owning registry, synchronized by the caller.
+ * @param library Live context-owned loader, retained through active calls.
+ * @param name Copied unique registry name.
+ * @param symbol Exact native symbol name, borrowed during binding.
+ * @param signature Complete scalar/aggregate shape, copied with type ownership.
+ * @param fixed_argument_count Named argument count, from 1 through total count.
+ * @param convention Explicit host C calling convention.
+ * @return 0 success, -1 invalid/unpromoted type, -2 duplicate/missing, -3 failure, -4 unsupported.
+ * @note Follows exl_register_native_data_variadic's promotion contract and
+ * exl_library_bind_data's active-call lifetime and reentrant-close rules. */
+EXL_DEF int exl_library_bind_data_variadic(exl_context_t *context,exl_library_t *library,const char *name,
+  const char *symbol,const exl_data_signature_t *signature,size_t fixed_argument_count,exl_callconv_t convention);
 /** @brief Invoke a registered exact data-buffer native call, synchronously.
  * @param context Registry, synchronized by caller; reentrant calls are supported.
  * @param name Registered data-call name.

@@ -2,7 +2,7 @@
 set(limestone_install_targets limestone_foundation limestone_parsers metacode
   schedrow regtl regtl_schedrow limeburg unisel limeburg_umd limeburg_infobank
   limeburg_text schedrow_text regtl_text bin2bin bin2bin_codegen bin2bin_object machineir_bridge
-  tunah tunah_unisel tunah_bin2bin traceml exolayer limestone_core limestone_il limestone_optimization limestone_object)
+  tunah tunah_unisel tunah_bin2bin tunah_stages traceml exolayer limestone_core limestone_il limestone_optimization limestone_object limestone_traceml_api limestone_selection_contracts)
 foreach(target IN LISTS limestone_install_targets)
   string(REGEX REPLACE "^limestone_" "" public_name "${target}")
   set_target_properties(${target} PROPERTIES EXPORT_NAME ${public_name})
@@ -30,6 +30,9 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/limeburg/specs/ DESTINATION ${CMAKE_INST
 install(FILES ${PROJECT_SOURCE_DIR}/vmweave/vmweave.lua DESTINATION ${CMAKE_INSTALL_DATADIR}/limestone/vmweave)
 install(FILES ${PROJECT_SOURCE_DIR}/README.md ${PROJECT_SOURCE_DIR}/IMPLEMENTATION.md ${PROJECT_SOURCE_DIR}/LICENSE
   DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/limestone)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/manual/
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/limestone/manual
+  FILES_MATCHING PATTERN "*.md")
 foreach(component IN ITEMS limestone metacode/machine-ir schedrow regtl limeburg unisel bin2bin tunah traceml exolayer vmweave bindings parsers)
   install(FILES ${PROJECT_SOURCE_DIR}/${component}/README.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/limestone/${component})

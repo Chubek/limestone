@@ -12,6 +12,7 @@ typedef struct limestone_configuration limestone_configuration;
 typedef struct limestone_binary_architecture limestone_binary_architecture;
 typedef struct limestone_binary_transform limestone_binary_transform;
 typedef struct limestone_buffer limestone_buffer;
+typedef struct limestone_selection_predicate limestone_selection_predicate;
 typedef struct limestone_options { int optimize, schedule, allocate; } limestone_options;
 typedef enum limestone_status
 #ifdef __cplusplus
@@ -24,6 +25,18 @@ typedef enum limestone_status
   LIMESTONE_INTERRUPTED=9, LIMESTONE_RESOURCE_LIMIT=10
 } limestone_status;
 typedef struct limestone_error { limestone_status code; char message[512]; } limestone_error;
+/** Owning named selection proof. JSON context owns root, bindings and covered
+ * source facts, including string arguments, properties and memory contracts.
+ * Views are borrowed for the callback. proved must be 0/1; failures are copied.
+ * Proofs must be deterministic. Successful creation adopts userdata when release
+ * is supplied; release runs once after the last attachment/active-call snapshot.
+ * A callback may destroy its source predicate, target or document. */
+typedef limestone_status (*limestone_selection_proof)(const char *context_json,const char *parameters_json,
+  int *proved,void *userdata,limestone_error *);
+typedef void (*limestone_selection_release)(void *userdata);
+limestone_selection_predicate *limestone_selection_predicate_create(const char *name,
+  limestone_selection_proof,void *userdata,limestone_selection_release,limestone_error *);
+void limestone_selection_predicate_destroy(limestone_selection_predicate *);
 typedef enum limestone_selector
 #ifdef __cplusplus
   : int
@@ -33,7 +46,26 @@ typedef enum limestone_allocator
 #ifdef __cplusplus
   : int
 #endif
-{ LIMESTONE_ALLOCATE_LINEAR, LIMESTONE_ALLOCATE_GREEDY, LIMESTONE_ALLOCATE_COLOR, LIMESTONE_ALLOCATE_CONSTRAINT } limestone_allocator;
+{ LIMESTONE_ALLOCATE_LINEAR, LIMESTONE_ALLOCATE_GREEDY, LIMESTONE_ALLOCATE_COLOR, LIMESTONE_ALLOCATE_CONSTRAINT, LIMESTONE_ALLOCATE_PBQP } limestone_allocator;
+typedef struct limestone_register_cost { uint32_t physical; double cost; } limestone_register_cost;
+typedef struct limestone_value_cost {
+  uint32_t value;
+  double spill_cost;
+  const limestone_register_cost *registers;
+  size_t register_count;
+} limestone_value_cost;
+typedef struct limestone_coalescing_cost { uint32_t first,second; double cost; } limestone_coalescing_cost;
+typedef struct limestone_pbqp_options {
+  size_t search_limit,cell_limit,work_limit;
+  double default_spill_cost;
+  const limestone_value_cost *values;
+  size_t value_count;
+  const limestone_coalescing_cost *coalescing;
+  size_t coalescing_count;
+} limestone_pbqp_options;
+/** Costs must be finite/nonnegative. Defaults: spill=1, register=0, one million
+ * residual search steps, eight million cells and fifty million work steps. */
+void limestone_pbqp_options_default(limestone_pbqp_options *);
 typedef enum limestone_dependency_kind
 #ifdef __cplusplus
   : int
@@ -79,6 +111,10 @@ limestone_target *limestone_target_load_file(const char *path,limestone_error *)
 /** Load an Infobank target and its supported metadata encoding adapter. */
 limestone_target *limestone_target_load_isa(const char *isa, limestone_error *);
 void limestone_target_destroy(limestone_target *);
+/** Snapshot a proof into every declaration with this name in all selectors.
+ * NULL clears the attachment. Missing names return NOT_FOUND transactionally. */
+limestone_status limestone_target_set_selection_predicate(limestone_target *,const char *name,
+  const limestone_selection_predicate *,limestone_error *);
 /** Create an independently owned machine-independent graph. Mutations copy inputs.
  * Handles may outlive targets; synchronize mutation and compilation of a shared handle.
  */
@@ -97,6 +133,10 @@ limestone_status limestone_program_add_dependency(limestone_program *,uint32_t p
  * alias; alignment is 0 (unknown) or a power of two. Boolean fields must be 0/1.
  */
 limestone_status limestone_program_set_memory(limestone_program *,uint32_t id,const limestone_memory_access *,limestone_error *);
+/** Copy the versioned source payload {"strings":[{"index":0,"value":"..."}],
+ * "properties":{...}}. NULL clears it. String indices address the original mixed
+ * argument list; they must be distinct unsigned 32-bit identities. */
+limestone_status limestone_program_set_metadata(limestone_program *,uint32_t id,const char *json,limestone_error *);
 /** Blocks are declared in final layout order; the entry must be the first block.
  * Successors/live-outs/targets are copied and may refer to later declarations.
  */
@@ -122,6 +162,9 @@ limestone_status limestone_configuration_set_pipeline(limestone_configuration *,
   int allocate,int encode,int trace_execution,limestone_error *);
 limestone_status limestone_configuration_set_algorithms(limestone_configuration *,limestone_selector,
   limestone_allocator,limestone_error *);
+/** Copy PBQP costs and limits; NULL restores defaults. Value/register identities
+ * are checked against the selected allocation problem during compilation. */
+limestone_status limestone_configuration_set_pbqp(limestone_configuration *,const limestone_pbqp_options *,limestone_error *);
 limestone_module *limestone_compile_configured(const char *,const limestone_configuration *,limestone_error *);
 limestone_module *limestone_compile_program_configured(const limestone_program *,const limestone_target *,
   const limestone_configuration *,limestone_error *);

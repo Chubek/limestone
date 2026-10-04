@@ -18,6 +18,9 @@ hazards, memory alias/order constraints, barriers, calls, and trap/terminator
 ordering. `scheduler_only` distinguishes artificial edges from semantic edges;
 iteration distance is retained. `verify_order` validates sequential emission,
 including zero-latency dependencies and declared block layout.
+Potentially aliasing atomic accesses retain semantic memory dependencies even
+between relaxed loads. Explicitly disjoint alias sets or address spaces still
+permit independent scheduling; ordinary relaxed loads remain reorderable.
 `verify` also checks issue-vector dependency order and group adjacency, so
 issue assignments remain consistent with sequential emission. Modulo verification
 checks intra-iteration issue order separately from loop-carried dependencies.
@@ -91,12 +94,21 @@ contracts are:
 
 Atomic groups are indivisible scheduler units; memory atomicity stays in the
 instruction's effect contract. Fusion benefits affect priority without changing
-resources, timing, or semantics. All groups stay within a block. Non-ordered
-groups have disjoint membership; ordered groups may overlap them. Bundles jointly
+resources, timing, or semantics. All groups stay within a block. Groups may share
+members; every group's ordering, adjacency and timing constraints apply. Bundles jointly
 solve resource alternatives and slots. Intervening dependency paths in a
 same-cycle group are co-issued, or rejected when positive latency, capacity, or
 adjacency makes that impossible. List, CFG, modulo, sequential-order and exchange
 verifiers enforce these contracts.
+
+Overlapping non-ordered groups use deterministic bounded search over adjacency
+chains and joint same-cycle batches. Contradictory adjacency, positive latency
+within a batch, and impossible resource/slot assignments are rejected. This path
+supports at most 1,024 instructions per block. `MachineModel::group_search_limit`
+(also the textual machine attribute `group_search_limit`) defaults to 1,000,000
+search steps, including emission choices and resource/slot packing. Exhaustion
+reports `ResourceLimit`, not an unsatisfiable result; zero disables this search.
+Verification of an existing schedule does not spend the construction budget.
 
 ```text
 machine_model dual { issue { width = 2; } }

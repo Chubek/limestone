@@ -10,7 +10,8 @@ Runtime::~Runtime() {
   // Their release hooks must not run inside map erasure or member destruction.
   decltype(regions_) retired;retired.swap(regions_);
   CodeInstaller installer;installer.swap(installer_);
-  std::optional<SemanticTransform> transform;transform.swap(options_.translation.semantic_transform);
+   std::optional<SemanticTransform> transform;transform.swap(options_.translation.semantic_transform);
+   std::optional<RegionTransform> region_transform;region_transform.swap(options_.translation.region_transform);
 }
 Result<std::shared_ptr<const TranslatedRegion>> Runtime::prepare(std::span<const uint8_t> bytes,uint64_t guest_address,uint64_t target_address) {
   using Output=Result<std::shared_ptr<const TranslatedRegion>>;
@@ -23,7 +24,9 @@ Result<std::shared_ptr<const TranslatedRegion>> Runtime::prepare(std::span<const
   std::vector<std::shared_ptr<TranslatedRegion>> retired;
   std::erase_if(published_,[](auto& pointer){return pointer.expired();});
   auto generation=generation_;
-  bool cacheable=!options_.translation.semantic_transform||options_.translation.semantic_transform->cacheable;
+    bool cacheable=(!options_.translation.semantic_transform||options_.translation.semantic_transform->cacheable)&&
+      (!options_.translation.region_transform||options_.translation.region_transform->cacheable)&&
+      (!source_.codec||source_.codec->cacheable)&&(!target_.codec||target_.codec->cacheable);
   std::string key=std::to_string(guest_address)+":"+std::to_string(target_address)+":";
   key.append(reinterpret_cast<const char*>(bytes.data()),bytes.size());
   auto found=regions_.find(key);

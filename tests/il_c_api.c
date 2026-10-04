@@ -123,6 +123,13 @@ void il_c_api(const char *directory) {
   }
   source=fixture(directory,"allocation.regtl");
   {
+    limestone_scheduling_document *document=limestone_schedrow_load("machine_model M {issue_width=3;}region R {instruction %1 {opcode=wide;latency=0;issue={width=2;slots=[0,2];};}}",NULL,&error);
+    limestone_schedule *issues;uint32_t slot;assert(document);issues=limestone_schedule_run(document,0,0,&error);assert(issues);limestone_scheduling_document_destroy(document);
+    assert(limestone_schedule_slot_count(issues,0)==2&&limestone_schedule_slot(issues,0,0,&slot,&error)==LIMESTONE_OK&&slot==0);
+    assert(limestone_schedule_slot(issues,0,1,&slot,&error)==LIMESTONE_OK&&slot==2);
+    assert(limestone_schedule_slot(issues,0,2,&slot,&error)==LIMESTONE_NOT_FOUND&&!limestone_schedule_slot_count(issues,99));limestone_schedule_destroy(issues);
+  }
+  {
     char *group_source=fixture(directory,"grouping.schedrow");limestone_scheduling_document *document=limestone_schedrow_load(group_source,NULL,&error);limestone_schedule *schedule;limestone_group_info group;limestone_issue first,second;uint32_t member;free(group_source);assert(document);
     schedule=limestone_schedule_run(document,0,0,&error);assert(schedule);limestone_scheduling_document_destroy(document);
     assert(limestone_schedule_group_count(schedule)==1&&limestone_schedule_group(schedule,0,&group,&error)==LIMESTONE_OK);
@@ -138,7 +145,7 @@ void il_c_api(const char *directory) {
     assert(strcmp(limestone_allocation_unit_name(document,0),"fixture")==0&&strcmp(limestone_allocation_function_name(document,0,0),"test")==0);
     assert(limestone_allocation_document_text(document)&&!limestone_assignment_run(document,0,99,LIMESTONE_ALLOCATE_LINEAR,&error)&&error.code==LIMESTONE_NOT_FOUND);
     assert(!limestone_assignment_run(document,0,0,(limestone_allocator)100,&error)&&error.code==LIMESTONE_INVALID_ARGUMENT);
-    for(algorithm=LIMESTONE_ALLOCATE_LINEAR;algorithm<=LIMESTONE_ALLOCATE_CONSTRAINT;algorithm=(limestone_allocator)(algorithm+1)) {
+    for(algorithm=LIMESTONE_ALLOCATE_LINEAR;algorithm<=LIMESTONE_ALLOCATE_PBQP;algorithm=(limestone_allocator)(algorithm+1)) {
       allocation=limestone_assignment_run(document,0,0,algorithm,&error);assert(allocation&&limestone_assignment_count(allocation)==2&&!limestone_assignment_spill_count(allocation));
       assert(limestone_assignment_register(allocation,7,&a,&error)==LIMESTONE_OK&&limestone_assignment_register(allocation,8,&b,&error)==LIMESTONE_OK&&a!=b&&b==2);
       assert(limestone_assignment_at(allocation,0,&value,&b,&error)==LIMESTONE_OK&&value==7&&b==a);limestone_assignment_destroy(allocation);
@@ -149,6 +156,19 @@ void il_c_api(const char *directory) {
     allocation=limestone_assignment_run(document,0,LIMESTONE_ALLOCATION_RANGES,LIMESTONE_ALLOCATE_COLOR,&error);assert(allocation&&limestone_assignment_spill_count(allocation)==1);
     assert(limestone_assignment_spill(allocation,0,&value,&error)==LIMESTONE_OK&&limestone_assignment_register(allocation,value,&a,NULL)==LIMESTONE_NOT_FOUND);
     limestone_assignment_destroy(allocation);limestone_allocation_document_destroy(document);
+    {
+      limestone_pbqp_options policy;limestone_value_cost costs[2]={{1,10,NULL,0},{2,2,NULL,0}};double cost=0;
+      limestone_configuration *config=limestone_configuration_create();limestone_pbqp_options_default(&policy);policy.values=costs;policy.value_count=2;
+      assert(limestone_configuration_set_algorithms(config,LIMESTONE_SELECT_GLOBAL,LIMESTONE_ALLOCATE_PBQP,&error)==LIMESTONE_OK);
+      assert(limestone_configuration_set_pbqp(config,&policy,&error)==LIMESTONE_OK);policy.default_spill_cost=-1;
+      assert(limestone_configuration_set_pbqp(config,&policy,&error)==LIMESTONE_INVALID_ARGUMENT);limestone_configuration_destroy(config);policy.default_spill_cost=1;
+      document=limestone_regtl_load("regtl p {regclass G=[$0];live %1:G [0,2] {} live %2:G [0,2] {}}",NULL,&error);assert(document);
+      allocation=limestone_assignment_run_pbqp(document,0,LIMESTONE_ALLOCATION_RANGES,&policy,&error);assert(allocation);
+      limestone_allocation_document_destroy(document);costs[0].spill_cost=0;costs[1].spill_cost=100;
+      assert(limestone_assignment_cost(allocation,&cost,&error)==LIMESTONE_OK&&cost==2);
+      assert(limestone_assignment_spill(allocation,0,&value,&error)==LIMESTONE_OK&&value==2);limestone_assignment_destroy(allocation);
+      assert(limestone_assignment_cost(NULL,&cost,&error)==LIMESTONE_INVALID_ARGUMENT);
+    }
   }
   assert(!limestone_schedrow_load("region broken {", "broken.schedrow",&error)&&error.code==LIMESTONE_PARSE&&strstr(error.message,"broken.schedrow"));
   assert(!limestone_burs_load(NULL,NULL,NULL)&&!limestone_regtl_load(NULL,NULL,NULL));

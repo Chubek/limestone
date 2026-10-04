@@ -19,7 +19,7 @@ int exl_ffi_data_aggregate(exl_ffi_data_type *const *,size_t,int array,exl_ffi_d
 void exl_ffi_data_type_destroy(exl_ffi_data_type *);
 int exl_ffi_data_layout(const exl_ffi_data_type *,size_t *,size_t *);
 int exl_ffi_data_offset(const exl_ffi_data_type *,size_t,size_t *);
-int exl_ffi_data_prepare(exl_ffi_data_type *,exl_ffi_data_type *const *,size_t,exl_callconv_t,exl_ffi_data_handle **);
+int exl_ffi_data_prepare(exl_ffi_data_type *,exl_ffi_data_type *const *,size_t,exl_callconv_t,int variadic,size_t fixed_argument_count,exl_ffi_data_handle **);
 void exl_ffi_data_destroy(exl_ffi_data_handle *);
 int exl_ffi_data_invoke(exl_ffi_data_handle *,exl_native_address_t,const exl_data_argument_t *,size_t,void *,size_t);
 /* Independent InteropTk host-layout checks for all primitives and flat scalar

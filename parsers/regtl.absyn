@@ -30,7 +30,7 @@ node Immediate { Integer literal; }
 node Memory { Operand address; }
 node Slot { Name name; }
 node Attribute { Name name; Value? value_data; Object? section; }
-sum Value = String | Integer | Boolean | Ident | Virtual | Physical | Array | Object;
+sum Value = String | Integer | Real | Boolean | Ident | Virtual | Physical | Array | Object;
 node Array { Value* items; }
 node Object { Attribute* attributes; }
 sum Name = Ident | String;
@@ -38,6 +38,7 @@ token Virtual;
 token Physical;
 token Unsigned;
 token Integer;
+token Real;
 token Boolean;
 token String;
 token Ident;

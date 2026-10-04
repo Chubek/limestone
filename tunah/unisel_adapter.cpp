@@ -24,7 +24,7 @@ Result<GraphOptimization> optimize_graph(const unisel::Program& input,const Sess
   }
   GraphOptimization result;result.program=input;
   std::map<unisel::NodeId,unisel::Node> nodes;std::map<unisel::NodeId,size_t> position;std::set<unisel::NodeId> pinned;uint64_t next=0;
-  for(size_t k=0;k<input.nodes.size();++k){auto& n=input.nodes[k];nodes[n.id]=n;position[n.id]=k;next=std::max(next,uint64_t(n.id)+1);result.values[n.id]=n.id;}
+  for(size_t k=0;k<input.nodes.size();++k){auto& n=input.nodes[k];nodes[n.id]=n;position[n.id]=k;next=std::max(next,uint64_t(n.id)+1);result.values[n.id]=n.id;if(!n.metadata.empty())pinned.insert(n.id);}
   for(auto& d:input.dependencies){pinned.insert(d.producer);pinned.insert(d.consumer);}
   // Topological traversal is independent of caller vector and numeric ID order.
   std::map<unisel::NodeId,size_t> degree;std::map<unisel::NodeId,std::vector<unisel::NodeId>> users;

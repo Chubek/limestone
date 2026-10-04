@@ -1,4 +1,6 @@
 #include "limeburg.hpp"
+#include "schedrow/operand_facts.hpp"
+#include "schedrow/memory_metadata.hpp"
 #include <limits>
 #include <map>
 #include <set>
@@ -30,16 +32,22 @@ Result<int> validate(const RuleSet& rs) {
     }
     std::vector<std::string> bindings;if(r.pattern){std::vector<const Pattern*> work{&*r.pattern};while(!work.empty()){auto pattern=work.back();work.pop_back();if(!pattern->binding.empty())bindings.push_back(pattern->binding);for(auto& child:pattern->children)work.push_back(&child);}}
     auto legal=metacode::validate_operand_constraints(r.constraints,bindings);if(!legal)return Result<int>::err({legal.error().code,(r.origin.empty()?"":r.origin+": ")+"BURS rule "+std::to_string(r.id)+": "+legal.error().message});
+    legal=metacode::validate_host_constraints(r.host_constraints);if(!legal)return legal;
+    if(r.fused_memory){if(!r.supports_side_effects||r.host_constraints.empty())return Result<int>::err({Error::Code::InvalidArgument,"memory fusion requires effect support and a named proof"});auto memory=schedrow::metadata::validate_memory_access(*r.fused_memory);if(!memory)return memory;}
   }
   return Result<int>::ok(0);
 }
 Result<StateTable> analyze(const std::vector<Node>& nodes,NodeId root,const RuleSet& rs,bool trace) {
   auto valid=validate(rs);if(!valid)return Result<StateTable>::err(valid.error());
+  for(auto& rule:rs.rules)for(auto& predicate:rule.host_constraints)if(!predicate.prove)return Result<StateTable>::err({Error::Code::Unsupported,rule.origin+": unbound target predicate: "+predicate.name});
   std::map<NodeId,const Node*> map;
   for(auto& n:nodes) {
     if(n.op.empty()||!map.emplace(n.id,&n).second)return Result<StateTable>::err({Error::Code::InvalidArgument,"empty operation or duplicate tree node"});
     if(!n.required&&(!n.produces_value||!n.children.empty()||n.side_effect||n.access||n.call||n.terminator||n.may_trap))return Result<StateTable>::err({Error::Code::InvalidArgument,"external BURS values must be effect-free value leaves"});
     if(n.known_constant&&(n.required||n.has_imm))return Result<StateTable>::err({Error::Code::InvalidArgument,"known constants belong to non-immediate external boundaries"});
+    auto metadata=metacode::load_operand_metadata(metacode::operand_metadata(n.metadata));if(!metadata)return Result<StateTable>::err(metadata.error());
+    for(auto& argument:n.metadata.strings)if(n.required&&argument.index>=n.children.size()+n.metadata.strings.size()+n.has_imm)return Result<StateTable>::err({Error::Code::InvalidArgument,"invalid mixed BURS string argument"});
+    if(n.access){auto memory=schedrow::metadata::validate_memory_access(*n.access);if(!memory)return Result<StateTable>::err(memory.error());}
   }
   if(!map.contains(root))return Result<StateTable>::err({Error::Code::InvalidArgument,"missing tree root"});
   std::unordered_map<NodeId,unsigned> state,parents;
@@ -92,6 +100,8 @@ Result<StateTable> analyze(const std::vector<Node>& nodes,NodeId root,const Rule
     if(r.pattern)pattern=*r.pattern;
     else { pattern.op=r.op;for(auto& nt:r.operands)pattern.children.push_back(Pattern{"",nt}); }
     if(!match(id,pattern)){reject(std::move(reason));continue;}
+    auto memory_count=std::count_if(d.covered.begin(),d.covered.end(),[&](auto value){return bool(map.at(value)->access);});
+    if((memory_count>1&&!r.fused_memory)||(r.fused_memory&&!memory_count)){reject("multiple memory accesses require an explicit proved memory contract");continue;}
     bool legal=true;
     for(auto& constraint:r.constraints) {
       auto& operand=*map.at(bindings.at(constraint.operand));std::optional<metacode::BoundOperand> other;
@@ -99,6 +109,11 @@ Result<StateTable> analyze(const std::vector<Node>& nodes,NodeId root,const Rule
       if(!metacode::satisfies(constraint,{operand.id,operand.has_imm?std::optional<int64_t>(operand.imm):operand.known_constant},other)){if(trace)reason="operand predicate "+std::string(metacode::predicate_name(constraint.predicate))+" failed for binding "+constraint.operand;legal=false;break;}
     }
     if(!legal){reject(std::move(reason));continue;}
+    if(r.host_constraints.empty()&&std::any_of(d.covered.begin(),d.covered.end(),[&](auto value){return map.at(value)->required&&!map.at(value)->metadata.empty();})){reject("target-defined source properties require a proof predicate");continue;}
+    if(!r.host_constraints.empty()){
+      auto facts=[&](NodeId id){auto& node=*map.at(id);return schedrow::operand_facts(id,node.op,node.type,node.register_class,node.has_imm?std::optional<int64_t>(node.imm):node.known_constant,node.metadata,node.access,node.side_effect,node.call,node.terminator,node.may_trap,node.children);};
+      metacode::Value::Object bound;for(auto& [name,id]:bindings)bound[name]=facts(id);metacode::Value::Array covered;for(auto id:d.covered)covered.push_back(facts(id));metacode::Value::Object context{{"root",facts(id)},{"bindings",metacode::Value(std::move(bound))},{"covered",metacode::Value(std::move(covered))}};if(r.fused_memory){context["memory_contract"]=schedrow::metadata::value(*r.fused_memory);metacode::Value::Array order;for(auto& source:nodes)if(std::find(d.covered.begin(),d.covered.end(),source.id)!=d.covered.end())order.push_back(facts(source.id));context["source_order"]=metacode::Value(std::move(order));}auto proved=metacode::prove_host_constraints(r.host_constraints,context);if(!proved)return Result<StateTable>::err(proved.error());if(!proved.value()){reject("target predicate rejected source facts");continue;}
+    }
     if(cost>std::numeric_limits<int>::max())return Result<StateTable>::err({Error::Code::ResourceLimit,"BURS cost overflow"});
     d.cost=static_cast<int>(cost);
     auto nt=rs.nonterminals.at(r.lhs);auto it=dp[id].find(nt);bool improves=it==dp[id].end()||d.cost<it->second.cost;
@@ -180,6 +195,7 @@ Result<schedrow::Region> emit_scheduler(const std::vector<Node>& nodes,const Rul
       continue;
     }
      schedrow::Instruction i{};i.id=id;i.opcode=rule.instruction;if(map.at(id)->produces_value)i.defs={id};
+     i.access=rule.fused_memory;i.memory=bool(i.access);
       if(map.at(id)->produces_value&&!map.at(id)->register_class.empty())i.register_classes[id]=map.at(id)->register_class;
     for(auto source:d.covered)if(map.at(source)->has_imm)i.immediates.emplace_back(source,map.at(source)->imm);
     for(auto child:d.children) {
@@ -187,11 +203,13 @@ Result<schedrow::Region> emit_scheduler(const std::vector<Node>& nodes,const Rul
        else {i.uses.push_back(child);region.deps.push_back({child,id,schedrow::DepKind::True,0});}
      }
      for(auto child:i.uses)if(!map.at(child)->register_class.empty())i.register_classes[child]=map.at(child)->register_class;
+     for(auto child:i.uses)if(!map.at(child)->metadata.empty())i.source_metadata[child]=map.at(child)->metadata;
       i.origin="rule "+std::to_string(d.rule)+", source "+std::to_string(id);
       if(!rule.origin.empty())i.origin+="; "+rule.origin;
      for(auto source:d.covered) {
        const auto& node=*map.at(source);
-       if(node.access){if(i.access)return Result<schedrow::Region>::err({Error::Code::Unsupported,"fused memory accesses require an effect adapter"});i.access=node.access;i.memory=true;}
+       if(!node.metadata.empty())i.source_metadata[source]=node.metadata;
+       if(node.access){if(!rule.fused_memory){if(i.access)return Result<schedrow::Region>::err({Error::Code::Unsupported,"fused memory accesses require an effect adapter"});i.access=node.access;}i.memory=true;}
         i.call|=node.call;i.terminator|=node.terminator;i.may_trap|=node.may_trap;
         i.barrier|=node.side_effect&&!node.access&&!node.call&&!node.terminator;
        if(node.side_effect||node.access||node.call||node.terminator||node.may_trap)i.speculative=false;

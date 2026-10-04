@@ -9,6 +9,7 @@ using NonterminalId=uint32_t;
 struct Node { NodeId id; std::string op, type; std::vector<NodeId> children; int64_t imm=0; bool has_imm=false; bool required=true, produces_value=true, side_effect=false; std::optional<schedrow::MemoryAccess> access; bool call=false, terminator=false, may_trap=false; std::string origin, register_class;
   // A known forest value remains a register operand across the boundary.
   std::optional<int64_t> known_constant;
+  metacode::OperandMetadata metadata;
 };
 struct Pattern {
   std::string op, nonterminal, type;
@@ -25,6 +26,8 @@ struct Rule {
   bool external_only=false;
   std::string origin;
   std::vector<metacode::OperandConstraint> constraints;
+  std::vector<metacode::HostConstraint> host_constraints;
+  std::optional<schedrow::MemoryAccess> fused_memory;
 };
 struct RuleSet { std::vector<Rule> rules; std::unordered_map<std::string,uint32_t> nonterminals; };
 struct Derivation {

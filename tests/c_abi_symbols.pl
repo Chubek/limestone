@@ -3,7 +3,7 @@ use warnings;
 my ($root,$nm,@libraries)=@ARGV;
 die "expected repository, nm and C ABI libraries\n" unless defined($nm) && @libraries;
 my %declared;
-for my $name (qw(limestone.h il.h runtime.h optimization.h object.h)) {
+for my $name (qw(limestone.h il.h runtime.h optimization.h object.h traceml.h)) {
     open my $file,'<',"$root/limestone/$name" or die "cannot read $name: $!\n";
     local $/;my $header=<$file>;
     $header=~s@/\*.*?\*/@@sg;

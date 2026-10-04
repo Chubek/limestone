@@ -45,6 +45,7 @@ Result<std::vector<uint8_t>> encode_region(const Architecture& target,const Enco
   struct Alternative{uint32_t id,width;};struct Plan{const schedrow::Instruction* instruction;std::map<std::string,std::string> operands;std::map<std::string,uint32_t> targets;std::vector<Alternative> alternatives;size_t choice=0;uint64_t address=0;};std::vector<Plan> plans;
   std::optional<size_t> last_block;
   for(auto id:order) {
+    auto selected=std::find_if(region.instructions.begin(),region.instructions.end(),[&](auto& i){return i.id==id;});if(selected!=region.instructions.end())for(auto& [source,metadata]:selected->source_metadata)if(!metadata.strings.empty())return Result<std::vector<uint8_t>>::err({Error::Code::Unsupported,"string operands require a target encoding adapter: "+selected->opcode});
     if(!instructions.contains(id)||!seen.insert(id).second)return Result<std::vector<uint8_t>>::err({Error::Code::Conflict,"invalid encoding order"});
     auto& instruction=*instructions.at(id);auto mapped=bindings.find(instruction.opcode);
     std::optional<ControlFlow> control;

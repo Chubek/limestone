@@ -31,12 +31,18 @@ int main(int argc,char** argv){return test_main([&]{
   fails(schedrow::load_schedrow("region x {instruction %1 {opcode=A;latency=0;resources=[{resource=ALU;duration=0;}];}}"),Error::Code::InvalidArgument);
   auto named=take(schedrow::load_schedrow("region x {instruction %name {opcode=A;latency=0;def %value;result_latency={value=3;};}}"));CHECK(named.regions[0].region.instructions[0].result_latency.at(0)==3);
   auto physical_latency=take(schedrow::load_schedrow("region x {instruction %1 {opcode=A;latency=4;def %1;implicit_def %1;result_latency={\"1\"=0;};implicit_result_latency={\"1\"=2;};}instruction %2 {opcode=B;latency=0;use %1;implicit_use %1;}}"));auto physical_text=take(schedrow::print_schedrow(physical_latency));auto physical_copy=take(schedrow::load_schedrow(physical_text));CHECK(take(schedrow::schedule(physical_copy.regions[0].region,{}))[1].cycle==2&&take(schedrow::print_schedrow(physical_copy))==physical_text);
+  auto ranges=take(schedrow::load_schedrow("region x {instruction %1 {opcode=A;latency={result=2..8;memory=3..9;};memory=true;def %value;implicit_def %flag;result_latency={value=2..6;};implicit_result_latency={flag=[1,4];};operand_latencies=[{result=%value;consumer=B;use=0;cycles=[0,2];},{result=%flag;consumer=B;use=0;cycles={min=1;max=3;};implicit=true;}];}instruction %2 {opcode=B;latency=0;use %value;implicit_use %flag;}}"));auto range_text=take(schedrow::print_schedrow(ranges));auto range_copy=take(schedrow::load_schedrow(range_text));CHECK(take(schedrow::print_schedrow(range_copy))==range_text);CHECK(take(schedrow::schedule(range_copy.regions[0].region,{}))[1].cycle==3);
+  fails(schedrow::load_schedrow("region x {instruction %1 {opcode=A;latency=8..2;}}"),Error::Code::InvalidArgument);
+  fails(schedrow::load_schedrow("region x {instruction %1 {opcode=A;latency=0;def %v;operand_latencies=[{result=%v;consumer=B;use=0;cycles=[0,2];unknown=true;}];}}"),Error::Code::Unsupported);
   auto grouped=take(schedrow::load_schedrow(read(fixtures+"/grouping.schedrow")));CHECK(grouped.regions.size()==2&&grouped.regions[0].region.groups[0].kind==schedrow::GroupKind::Bundle);auto group_text=take(schedrow::print_schedrow(grouped));auto group_copy=take(schedrow::load_schedrow(group_text));CHECK(take(schedrow::print_schedrow(group_copy))==group_text);for(auto& r:group_copy.regions)take(schedrow::verify(r.region,group_copy.machine,take(schedrow::schedule(r.region,group_copy.machine))));auto bundle_issues=take(schedrow::schedule(group_copy.regions[0].region,group_copy.machine));CHECK(bundle_issues[0].slot==1&&bundle_issues[0].resources[0]=="B");
   auto annotated=take(schedrow::load_schedrow("region x {instruction %9 {opcode=A;latency=0;group={id=5;kind=pair;};}instruction %1 {opcode=B;latency=0;group={id=5;kind=pair;};}}"));CHECK(annotated.regions[0].region.groups[0].members==std::vector<uint32_t>({9,1}));auto annotation_text=take(schedrow::print_schedrow(annotated));CHECK(take(schedrow::print_schedrow(take(schedrow::load_schedrow(annotation_text))))==annotation_text);
   auto standalone_bundle=take(schedrow::load_schedrow("bundle named {instruction %1 {opcode=A;latency=0;}}"));CHECK(standalone_bundle.regions[0].region.groups[0].name=="named");
-  fails(schedrow::load_schedrow("region x {bundle a {bundle b {instruction %1 {opcode=A;latency=0;}}}}"),Error::Code::Unsupported);
+  auto overlapping=take(schedrow::load_schedrow("machine_model shared {issue_width=2;group_search_limit=1234;} region x {groups=[{id=1;kind=adjacent;members=[%1,%2];},{id=2;kind=bundle;members=[%1,%2];}];instruction %1 {opcode=A;latency=0;}instruction %2 {opcode=B;latency=0;}}"));
+  auto overlap_copy=take(schedrow::load_schedrow(take(schedrow::print_schedrow(overlapping))));CHECK(overlap_copy.machine.group_search_limit==1234&&overlap_copy.regions[0].region.groups.size()==2);take(schedrow::verify(overlap_copy.regions[0].region,overlap_copy.machine,take(schedrow::schedule(overlap_copy.regions[0].region,overlap_copy.machine))));
+  auto nested=take(schedrow::load_schedrow("region x {bundle a {bundle b {instruction %1 {opcode=A;latency=0;}}}}"));CHECK(nested.regions[0].region.groups.size()==2);take(schedrow::verify(nested.regions[0].region,{},take(schedrow::schedule(nested.regions[0].region,{}))));
   fails(schedrow::load_schedrow("region x {instruction %9 {opcode=A;latency=0;group={id=5;kind=pair;};}instruction %1 {opcode=B;latency=0;group={id=5;kind=atomic;};}}"),Error::Code::Conflict);
-  fails(schedrow::load_schedrow("region x {instruction %1 {opcode=A;latency=0;issue={width=2;};}}"),Error::Code::Unsupported);
+  auto wide=take(schedrow::load_schedrow("machine_model dual {issue_width=2;} region x {instruction %1 {opcode=A;latency=0;issue={width=2;slots=[0,1];};}}"));
+  CHECK(wide.regions[0].region.instructions[0].issue_width==2);auto wide_roundtrip=take(schedrow::load_schedrow(take(schedrow::print_schedrow(wide))));CHECK(wide_roundtrip.regions[0].region.instructions[0].issue_width==2);take(schedrow::verify(wide_roundtrip.regions[0].region,wide_roundtrip.machine,take(schedrow::schedule(wide_roundtrip.regions[0].region,wide_roundtrip.machine))));
   auto units=take(regtl::load_regtl(read(fixtures+"/allocation.regtl")));CHECK(units.size()==1&&units[0].functions.size()==1&&units[0].slots[0].alignment==8);auto& function=units[0].functions[0].function;auto live=take(regtl::analyze(function));CHECK(function.blocks[0].instructions[3].parallel&&function.blocks[0].instructions[3].transfers.size()==2);CHECK(live.live_in.at(function.blocks[1].id)==std::vector<uint32_t>{7});for(auto allocator:{regtl::linear_scan,regtl::greedy,regtl::graph_color}){auto assigned=take(allocator(live.problem));CHECK(assigned.regs.at(8)==2);take(regtl::verify(live.problem,assigned));}
   auto allocation_text=take(regtl::print_regtl(units));auto allocation_copy=take(regtl::load_regtl(allocation_text));CHECK(take(regtl::print_regtl(allocation_copy))==allocation_text);auto copy_live=take(regtl::analyze(allocation_copy[0].functions[0].function));CHECK(take(regtl::graph_color(copy_live.problem)).regs.at(8)==2);CHECK(allocation_copy[0].metadata.at("notes").text()==units[0].metadata.at("notes").text());
   fails(regtl::load_regtl("regtl x {regclass G=[$0];live %1:G [0,1] {} function f {block b {instruction I {use %missing;}}}}"),Error::Code::NotFound);
@@ -45,4 +51,25 @@ int main(int argc,char** argv){return test_main([&]{
   fails(regtl::load_regtl("regtl x {regclass G=[$0];live %1:G [0,1] {allowed=[];}}"),Error::Code::Unsatisfiable);
   fails(regtl::load_regtl("regtl x {regclass G=[$0,$1];alias $0=$1;function f {block b {parallel {move $0 <- #1;move $1 <- #2;}}}}"),Error::Code::Conflict);
   auto quoted_constraints=take(regtl::load_regtl("regtl x {regclass G=[$0,$1];live %1:G [0,1] {\"fixed\"=\"$1\";}}"));CHECK(take(regtl::linear_scan(quoted_constraints[0].problem)).regs.at(1)==1);
+  auto lanes=take(regtl::load_regtl(R"(regtl x {
+    regclass G=[$low,$high,$full];
+    live %left:G [0,2] {bank=integer;fixed=$low;}
+    live %right:G [0,2] {bank=integer;fixed=$high;}
+    storage=[{register=$low;bank=integer;slices=[{unit=0;begin=0;width=8;}];},
+             {register=$high;bank=integer;slices=[{unit=0;begin=8;width=8;}];},
+             {register=$full;bank=integer;slices=[{unit=0;begin=0;width=16;}];}];
+    tuples=[{values=[%left,%right];alternatives=[[$low,$high]];}];
+    function f {block b {instruction I {def %left;def %right;} live_out=[%left,%right];}}
+  })"));
+  auto lanes_text=take(regtl::print_regtl(lanes));auto lanes_copy=take(regtl::load_regtl(lanes_text));CHECK(take(regtl::print_regtl(lanes_copy))==lanes_text);
+  CHECK(lanes_copy[0].problem.ranges[0].constraint.bank=="integer");take(regtl::verify(lanes_copy[0].problem,take(regtl::graph_color(lanes_copy[0].problem))));
+  auto lane_live=take(regtl::analyze(lanes_copy[0].functions[0].function));take(regtl::verify(lane_live.problem,take(regtl::constraint_allocate(lane_live.problem))));
+  lanes[0].problem.storage[0].bank="edited";lanes[0].problem.ranges[0].constraint.bank="edited";CHECK(take(regtl::print_regtl(lanes)).find("edited")!=std::string::npos);
+  fails(regtl::load_regtl("regtl x {regclass G=[$0];live %1:G [0,1] {bank=missing;}}"),Error::Code::InvalidArgument);
+  auto weighted=take(regtl::load_regtl(R"(regtl costed {regclass G=[$r];live %a:G [0,3] {} live %b:G [0,3] {}
+    pbqp={values=[{value=%a;spill_cost=10;registers=[{register=$r;cost=0.25;}];},{value=%b;spill_cost=2;}];};})"));
+  auto weighted_text=take(regtl::print_regtl(weighted));auto weighted_copy=take(regtl::load_regtl(weighted_text));CHECK(take(regtl::print_regtl(weighted_copy))==weighted_text);
+  auto optimal=take(regtl::solve_pbqp(weighted_copy[0].problem,weighted_copy[0].pbqp));CHECK(optimal.cost==2.25&&optimal.allocation.spilled==std::vector<uint32_t>{weighted[0].virtual_names.at("%b")});
+  fails(regtl::load_regtl("regtl x {regclass G=[$0];live %1:G [0,1] {} pbqp={default_spill_cost=-1;};}"),Error::Code::InvalidArgument);
+  fails(regtl::load_regtl("regtl x {pbqp={approximate=true;};}"),Error::Code::Unsupported);
 });}

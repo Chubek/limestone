@@ -105,7 +105,7 @@ std::string mask_comments(std::string_view text) {
   return masked;
 }
 
-std::string preprocess(std::string_view specification, std::string_view source) {
+ekippx::MappedExpansion preprocess(std::string_view specification, std::string_view source) {
   ekippx::Config config;
   config.limits.max_output_size=detail::max_source_size;
   config.runtime.missing_symbol_policy=ekippx::MissingSymbolPolicy::error;
@@ -120,15 +120,17 @@ std::string preprocess(std::string_view specification, std::string_view source) 
     [](ekippx::Context& ctx,const ekippx::Invocation& invocation) {
       ctx.macros().define_literal(invocation.args[0],invocation.args[1]);
     });
-  return context.expand_text(specification,source);
+  return context.expand_mapped(specification,source);
 }
 
-Document parse(std::string_view text, std::string_view source, bool expanded=false, bool input_only=false) {
+Document parse(std::string_view text, std::string_view source, bool expanded=false, bool input_only=false,
+               const std::function<SourceLocation(SourceLocation)>& source_map={}) {
   if(text.size()>detail::max_source_size)
     throw detail::diagnostic(Error::Code::ResourceLimit,"specification size limit exceeded",{std::string(source)});
   Document document;
   document.tokens.reserve(std::min<size_t>(text.size()/2+1,32));
   SourceLocation location{std::string(source),1,1,0,expanded};
+  auto mapped=[&](SourceLocation location){return source_map?source_map(std::move(location)):location;};
   size_t depth=0,pos=0;
   auto advance=[&] {
     if(text[pos++]=='\n') { ++location.line; location.column=1; } else ++location.column;
@@ -139,17 +141,17 @@ Document parse(std::string_view text, std::string_view source, bool expanded=fal
     if(std::isspace(static_cast<unsigned char>(c))) { advance(); continue; }
     if(c==';') { while(pos<text.size()&&text[pos]!='\n') advance(); continue; }
     if(c=='(') {
-      document.tokens.push_back({location,true});
-      if(++depth>detail::max_depth) throw detail::diagnostic(Error::Code::ResourceLimit,"S-expression nesting limit exceeded",location);
+      document.tokens.push_back({mapped(location),true});
+      if(++depth>detail::max_depth) throw detail::diagnostic(Error::Code::ResourceLimit,"S-expression nesting limit exceeded",mapped(location));
       advance(); continue;
     }
     if(c==')') {
-      if(!depth) throw detail::diagnostic(Error::Code::Parse,"unexpected ')'",location);
+      if(!depth) throw detail::diagnostic(Error::Code::Parse,"unexpected ')'",mapped(location));
       --depth; advance(); continue;
     }
-    if(c=='\''||c=='`') throw detail::diagnostic(Error::Code::Unsupported,"quoted terms are unsupported",location);
+    if(c=='\''||c=='`') throw detail::diagnostic(Error::Code::Unsupported,"quoted terms are unsupported",mapped(location));
     const auto begin=pos;
-    document.tokens.push_back({location,false});
+    document.tokens.push_back({mapped(location),false});
     if(c=='"') {
       const auto start=location;
       advance(); bool closed=false;
@@ -158,17 +160,25 @@ Document parse(std::string_view text, std::string_view source, bool expanded=fal
         if(text[pos]=='\\') { advance(); if(pos<text.size()) advance(); }
         else advance();
       }
-      if(!closed) throw detail::diagnostic(Error::Code::Parse,"unterminated string",start);
+      if(!closed) throw detail::diagnostic(Error::Code::Parse,"unterminated string",mapped(start));
     } else {
       while(pos<text.size()&&!std::isspace(static_cast<unsigned char>(text[pos]))&&
             text[pos]!='('&&text[pos]!=')'&&text[pos]!=';') advance();
     }
     document.tokens.back().atom=text.substr(begin,pos-begin);
   }
-  if(depth) throw detail::diagnostic(Error::Code::Parse,"unterminated S-expression",location);
+  if(depth) throw detail::diagnostic(Error::Code::Parse,"unterminated S-expression",mapped(location));
 
   auto parsed=sexprtk::SExprTk{}.parse(sexprtk::Source::from_string(std::string(text),std::string(source)));
-  if(!parsed.ok()) throw Error{Error::Code::Parse,parsed.errors.front()};
+  if(!parsed.ok()) {
+    // SExprTk formats full-size coordinates in its diagnostic text (event
+    // coordinates are narrowed to 16 bits). Recover them before source mapping.
+    auto message=parsed.errors.front();auto column_separator=message.rfind(':'),line_separator=column_separator==std::string::npos?std::string::npos:message.rfind(':',column_separator-1);
+    if(line_separator!=std::string::npos){size_t line=0,column=0;auto a=std::from_chars(message.data()+line_separator+1,message.data()+column_separator,line);auto b=std::from_chars(message.data()+column_separator+1,message.data()+message.size(),column);
+      if(a.ec==std::errc{}&&b.ec==std::errc{}&&line&&column){SourceLocation error_location{std::string(source),line,column,0,expanded};size_t offset=0;for(size_t n=1;n<line&&offset<text.size();++n){auto end=text.find('\n',offset);offset=end==std::string_view::npos?text.size():end+1;}error_location.offset=std::min(text.size(),offset+std::min(column-1,text.size()-offset));auto suffix=message.rfind(" at ");if(suffix!=std::string::npos)message.resize(suffix);throw detail::diagnostic(Error::Code::Parse,std::move(message),mapped(std::move(error_location)));}
+    }
+    throw detail::diagnostic(Error::Code::Parse,std::move(message),mapped(location));
+  }
   if(input_only) {
     if(parsed.root.size()!=1) throw detail::diagnostic(Error::Code::Parse,"expected exactly one input term",{std::string(source)});
     // The input adapter uses SExprTk's existing tree directly; only rewrite
@@ -285,8 +295,17 @@ Result<int> Session::load_rules(std::string_view specification, std::string_view
   try {
     if(specification.size()>detail::max_source_size) throw Error{Error::Code::ResourceLimit,"specification size limit exceeded"};
     auto masked=mask_comments(specification);
-    auto text=preprocess(masked,source);
-    auto document=parse(text,source,text!=masked);
+    auto expansion=preprocess(masked,source);
+    // Map tokens and lexical/parser failures before AST construction. Expansion
+    // bytes map to their invocation; copied bytes retain exact source positions.
+    std::vector<size_t> lines{0};for(size_t i=0;i<specification.size();++i)if(specification[i]=='\n')lines.push_back(i+1);
+    auto source_map=[&](SourceLocation location){auto offset=location.offset;size_t original=specification.size();
+      if(offset<expansion.output.size()){auto span=std::upper_bound(expansion.spans.begin(),expansion.spans.end(),offset,[](size_t offset,const auto& span){return offset<span.output_end;});
+        if(span==expansion.spans.end()||offset<span->output_begin)throw Error{Error::Code::Internal,"incomplete preprocessing source map"};original=span->expanded?span->source_begin:span->source_begin+offset-span->output_begin;
+      }
+      auto line=std::upper_bound(lines.begin(),lines.end(),original)-lines.begin();location.line=line;location.column=original-lines[line-1]+1;location.offset=original;if(expansion.output!=masked)location.expanded_offset=offset;return location;
+    };
+    auto document=parse(expansion.output,source,expansion.output!=masked,false,source_map);
     auto operators=operators_;
     // Declarations are visible throughout this load, including before their use.
     for(const auto& form:document.forms) {

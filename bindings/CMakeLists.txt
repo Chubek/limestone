@@ -4,10 +4,10 @@ set(LIMESTONE_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" PARENT_SCOPE)
 include(UseSWIG)
 set(CMAKE_SWIG_OUTDIR "${CMAKE_CURRENT_BINARY_DIR}/python")
 set_source_files_properties(limestone.i PROPERTIES CPLUSPLUS ON
-  USE_TARGET_INCLUDE_DIRECTORIES TRUE DEPENDS "${PROJECT_SOURCE_DIR}/limestone/limestone.h;${PROJECT_SOURCE_DIR}/limestone/il.h;${PROJECT_SOURCE_DIR}/limestone/runtime.h;${PROJECT_SOURCE_DIR}/limestone/optimization.h;${PROJECT_SOURCE_DIR}/limestone/object.h")
+  USE_TARGET_INCLUDE_DIRECTORIES TRUE DEPENDS "${PROJECT_SOURCE_DIR}/limestone/limestone.h;${PROJECT_SOURCE_DIR}/limestone/il.h;${PROJECT_SOURCE_DIR}/limestone/runtime.h;${PROJECT_SOURCE_DIR}/limestone/optimization.h;${PROJECT_SOURCE_DIR}/limestone/object.h;${PROJECT_SOURCE_DIR}/limestone/traceml.h")
 swig_add_library(limestone_python TYPE MODULE LANGUAGE python SOURCES limestone.i)
 target_include_directories(limestone_python PRIVATE "${PROJECT_SOURCE_DIR}")
-target_link_libraries(limestone_python PRIVATE limestone_core limestone_il limestone_optimization limestone_object Python3::Module)
+target_link_libraries(limestone_python PRIVATE limestone_core limestone_il limestone_optimization limestone_object limestone_traceml_api Python3::Module)
 set_target_properties(limestone_python PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SWIG_OUTDIR}")
 set(LIMESTONE_PYTHON_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/limestone/python" CACHE PATH
   "Install directory for the optional Python module")

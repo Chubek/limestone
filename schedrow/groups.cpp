@@ -1,4 +1,5 @@
 #include "groups.hpp"
+#include "slots.hpp"
 #include <map>
 
 namespace limestone::schedrow {
@@ -30,7 +31,7 @@ Result<int> verify_groups(const Region& region,std::span<const Scheduled> entrie
       auto cycle=cycles.at(id);
       if(prior&&(cycle<*prior||(detail::same_cycle(group.kind)&&cycle!=*prior)))return Result<int>::err({Error::Code::Conflict,"group cycle violation: "+std::to_string(group.id)});
       prior=cycle;
-      if(!group.issue_slots.empty()){auto scheduled=std::find_if(entries.begin(),entries.end(),[&](auto& s){return s.id==id;});if(!scheduled->slot||std::find(group.issue_slots.begin(),group.issue_slots.end(),*scheduled->slot)==group.issue_slots.end())return Result<int>::err({Error::Code::Conflict,"group issue-slot violation"});}
+      if(!group.issue_slots.empty()){auto scheduled=std::find_if(entries.begin(),entries.end(),[&](auto& s){return s.id==id;});if(!scheduled->slot)return Result<int>::err({Error::Code::Conflict,"group issue-slot violation"});for(auto slot:detail::assigned_slots(*scheduled))if(std::find(group.issue_slots.begin(),group.issue_slots.end(),slot)==group.issue_slots.end())return Result<int>::err({Error::Code::Conflict,"group issue-slot violation"});}
     }
   }
   std::vector<Scheduled> sorted(entries.begin(),entries.end());

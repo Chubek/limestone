@@ -115,13 +115,20 @@ int exl_ffi_data_layout(const exl_ffi_data_type *type,size_t *size,size_t *align
   if(!type||!size||!alignment)return -1;if(type->scalar&&type->kind==EXL_NATIVE_VOID){*size=*alignment=0;return 0;}*size=type->type->size;*alignment=type->type->alignment;return 0;
 }
 int exl_ffi_data_offset(const exl_ffi_data_type *type,size_t index,size_t *offset) {if(!type||type->scalar||index>=type->count||!offset)return -1;*offset=type->offsets[index];return 0;}
-int exl_ffi_data_prepare(exl_ffi_data_type *result,exl_ffi_data_type *const *arguments,size_t count,exl_callconv_t convention,exl_ffi_data_handle **output) {
+int exl_ffi_data_prepare(exl_ffi_data_type *result,exl_ffi_data_type *const *arguments,size_t count,exl_callconv_t convention,int variadic,size_t fixed_count,exl_ffi_data_handle **output) {
   exl_ffi_data_handle *handle;ffi_abi abi;size_t k;
   if(!result||result->array||!output||count>EXL_NATIVE_MAX_ARGS||(count&&!arguments))return -1;
+  if(variadic&&(!fixed_count||fixed_count>count))return -1;
+  if(variadic&&(convention==EXL_CC_STDCALL||convention==EXL_CC_FASTCALL))return -4;
   if(exl_ffi_abi(convention,&abi))return -4;
   handle=(exl_ffi_data_handle *)calloc(1,sizeof(*handle));if(!handle)return -3;handle->count=count;handle->result=result;
-  for(k=0;k<count;++k){if(!arguments[k]||arguments[k]->array||(arguments[k]->scalar&&arguments[k]->kind==EXL_NATIVE_VOID)){free(handle);return -1;}handle->types[k]=arguments[k];handle->arguments[k]=arguments[k]->type;}
-  if(ffi_prep_cif(&handle->cif,abi,(unsigned)count,result->type,handle->arguments)!=FFI_OK){free(handle);return -4;}
+  for(k=0;k<count;++k){
+    if(!arguments[k]||arguments[k]->array||(arguments[k]->scalar&&arguments[k]->kind==EXL_NATIVE_VOID)){free(handle);return -1;}
+    if(variadic&&k>=fixed_count&&arguments[k]->scalar&&(arguments[k]->kind==EXL_NATIVE_F32||
+       (arguments[k]->kind>=EXL_NATIVE_I8&&arguments[k]->kind<=EXL_NATIVE_U64&&arguments[k]->type->size<sizeof(int)))){free(handle);return -1;}
+    handle->types[k]=arguments[k];handle->arguments[k]=arguments[k]->type;
+  }
+  if((variadic?ffi_prep_cif_var(&handle->cif,abi,(unsigned)fixed_count,(unsigned)count,result->type,handle->arguments):ffi_prep_cif(&handle->cif,abi,(unsigned)count,result->type,handle->arguments))!=FFI_OK){free(handle);return -4;}
   *output=handle;return 0;
 }
 void exl_ffi_data_destroy(exl_ffi_data_handle *handle){free(handle);}
@@ -156,7 +163,7 @@ int exl_ffi_data_aggregate(exl_ffi_data_type *const *fields,size_t count,int arr
 void exl_ffi_data_type_destroy(exl_ffi_data_type *type){(void)type;}
 int exl_ffi_data_layout(const exl_ffi_data_type *type,size_t *size,size_t *alignment){(void)type;(void)size;(void)alignment;return -4;}
 int exl_ffi_data_offset(const exl_ffi_data_type *type,size_t index,size_t *offset){(void)type;(void)index;(void)offset;return -4;}
-int exl_ffi_data_prepare(exl_ffi_data_type *result,exl_ffi_data_type *const *args,size_t count,exl_callconv_t convention,exl_ffi_data_handle **output){(void)result;(void)args;(void)count;(void)convention;(void)output;return -4;}
+int exl_ffi_data_prepare(exl_ffi_data_type *result,exl_ffi_data_type *const *args,size_t count,exl_callconv_t convention,int variadic,size_t fixed_count,exl_ffi_data_handle **output){(void)result;(void)args;(void)count;(void)convention;(void)variadic;(void)fixed_count;(void)output;return -4;}
 void exl_ffi_data_destroy(exl_ffi_data_handle *handle){(void)handle;}
 int exl_ffi_data_invoke(exl_ffi_data_handle *handle,exl_native_address_t function,const exl_data_argument_t *args,size_t count,void *result,size_t result_size){(void)handle;(void)function;(void)args;(void)count;(void)result;(void)result_size;return -4;}
 #endif

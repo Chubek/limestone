@@ -7,7 +7,7 @@ encoding. Bindings include explicitly named fixed definition/use operands; these
 check allocated physical registers without manufacturing encoding fields.
 C architecture/buffer APIs are in `limestone/limestone.h`; owning C
 runtime handles/callbacks are in `limestone/runtime.h` (link `Limestone::core`).
-`Limestone::bin2bin_object` / `Limestone::object` expose owning ELF64 objects and
+`Limestone::bin2bin_object` / `Limestone::object` expose owning ELF32/ELF64 objects and
 metadata-driven symbol relocation/linking; see [the object-file guide](OBJECTS.md).
 
 ## Codecs and semantics
@@ -167,5 +167,5 @@ storage with the same no-fallback behavior as the C++ cache API.
 CLI modes are `--disassemble ISA`, `--decompile ISA`, and
 `--translate SOURCE TARGET [--cache DIRECTORY]`, taking raw binary input and
 optional `-o FILE`. `--inspect-object`, `--wrap-object`, `--link-objects` and compiler
-`--object SYMBOL` use the ELF64 object layer. Higher-level/LLM decompiler plugins
+`--object SYMBOL` use the ELF32/ELF64 object layer. Higher-level/LLM decompiler plugins
 remain separate adapters.

@@ -3,6 +3,24 @@ import machineir;
 import std.exception : assertThrown;
 
 unittest {
+    auto strings=parseISA(`arch strings { value="\u0000\b\f\/\uD83D\uDE00"; }`);
+    auto value=strings.declarations[0].fields[0].value;
+    assert(value.text=="\0\b\f/\xf0\x9f\x98\x80");
+    auto roundtrip=parseISA("arch strings { value="~value.toString()~"; }");
+    assert(roundtrip.declarations[0].fields[0].value.text==value.text);
+    auto expression=parseSExpr(`(intrinsic "\u0000\b\f\/\uD83D\uDE00")`);
+    assert(expression.children[1].text==value.text);
+    assert(parseSExpr(expression.toString()).children[1].text==value.text);
+    auto semanticDocument=parseISA(`arch strings {} op quoted { semantics=(intrinsic "\u0000\b\f\/\uD83D\uDE00"); }`);
+    auto semanticText=semanticDocument.declarations[1].fields[0].value.text;
+    assert(parseSExpr(semanticText).children[1].text==value.text);
+    foreach(invalid;[`arch strings { value="\q"; }`,`arch strings { value="\uD800"; }`,`arch strings { value="\uDC00"; }`,`arch strings { value="\uZZZZ"; }`,"arch strings { value=\"line\nbreak\"; }","arch strings { value=\"\xff\"; }"])
+        assertThrown!ParseError(parseISA(invalid));
+    foreach(invalid;[`(intrinsic "\q")`,`(intrinsic "\uD800")`,`(intrinsic "\uDC00")`,"(intrinsic \"line\nbreak\")","(intrinsic \"\xff\")"])
+        assertThrown!SemanticError(parseSExpr(invalid));
+}
+
+unittest {
     assertThrown!ParseError(parseISA("arch a { x = 1; x = 2; }"));
     assertThrown!ParseError(parseISA("arch a { x = [1,; }"));
     assertThrown!ParseError(parseISA("arch a { x = foo(1; }"));

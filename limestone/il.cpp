@@ -1,5 +1,7 @@
 #include "il.h"
 #include "c_api_internal.hpp"
+#include "allocation_internal.hpp"
+#include "selection_internal.hpp"
 #include "limeburg/text.hpp"
 #include "schedrow/text.hpp"
 #include "regtl/text.hpp"
@@ -16,7 +18,7 @@ struct limestone_burs_analysis {
 struct limestone_scheduling_document { limestone::schedrow::SchedulingDocument document;std::string text; };
 struct limestone_schedule { std::vector<limestone::schedrow::Scheduled> issues;std::string text;std::vector<limestone::schedrow::InstructionGroup> groups; };
 struct limestone_allocation_document { std::vector<limestone::regtl::AllocationUnit> units;std::string text; };
-struct limestone_assignment { limestone::regtl::Allocation allocation;std::vector<std::pair<uint32_t,uint32_t>> assignments;std::string text; };
+struct limestone_assignment { limestone::regtl::Allocation allocation;std::vector<std::pair<uint32_t,uint32_t>> assignments;std::string text;double cost=0; };
 struct limestone_unisel_document { limestone::unisel::Document document; };
 struct limestone_selection_model {
   limestone::unisel::Program program;
@@ -55,6 +57,9 @@ extern "C" limestone_unisel_document* limestone_unisel_load_file(const char* pat
   return boundary(error,[&]()->limestone_unisel_document*{if(!path||!*path)invalid();return new limestone_unisel_document{checked(unisel::load_umd_file(path))};});
 }
 extern "C" void limestone_unisel_document_destroy(limestone_unisel_document* document){delete document;}
+extern "C" limestone_status limestone_unisel_set_selection_predicate(limestone_unisel_document* document,const char* name,const limestone_selection_predicate* predicate,limestone_error* error) {
+  return boundary(error,[&](){if(!document)invalid();auto patterns=document->document.machine.patterns;if(!bind_selection_predicate(patterns,name,predicate))throw Error{Error::Code::NotFound,"selection predicate is not declared"};document->document.machine.patterns=std::move(patterns);return LIMESTONE_OK;});
+}
 extern "C" limestone_selection_model* limestone_unisel_analyze(const limestone_unisel_document* document,limestone_error* error) {
   return boundary(error,[&]()->limestone_selection_model* {
     if(!document)invalid();if(!document->document.program)throw Error{Error::Code::InvalidArgument,"Unisel analysis needs a source graph"};
@@ -83,6 +88,7 @@ extern "C" limestone_selection* limestone_selection_run(const limestone_selectio
   return boundary(error,[&]()->limestone_selection* {
     if(!model)invalid();if(algorithm==LIMESTONE_SELECT_BURS)throw Error{Error::Code::Unsupported,"BURS selection uses the separate Limeburg adapter"};
     if(algorithm!=LIMESTONE_SELECT_GLOBAL&&algorithm!=LIMESTONE_SELECT_GREEDY)throw Error{Error::Code::InvalidArgument,"unknown graph selection algorithm"};
+    auto snapshot=*model;model=&snapshot;
     auto selected=checked(algorithm==LIMESTONE_SELECT_GLOBAL?unisel::solve(model->program,model->patterns):unisel::solve_greedy(model->program,model->patterns));
     auto region=checked(unisel::emit_scheduler(model->program,model->patterns,selected));std::vector<unisel::Candidate> ordered;
     for(auto& instruction:region.instructions){auto found=std::find_if(selected.selected.begin(),selected.selected.end(),[&](auto& match){return match.root==instruction.id;});if(found==selected.selected.end())throw Error{Error::Code::Internal,"selected operation has no candidate"};ordered.push_back(*found);}
@@ -108,8 +114,11 @@ extern "C" limestone_burs_document* limestone_burs_load_file(const char* path,li
   return boundary(error,[&]()->limestone_burs_document*{if(!path||!*path)invalid();auto document=checked(limeburg::load_rules_file(path));auto text=checked(limeburg::print_rules(document));return new limestone_burs_document{std::move(document),std::move(text)};});
 }
 extern "C" void limestone_burs_document_destroy(limestone_burs_document* document){delete document;}
+extern "C" limestone_status limestone_burs_set_selection_predicate(limestone_burs_document* document,const char* name,const limestone_selection_predicate* predicate,limestone_error* error) {
+  return boundary(error,[&](){if(!document)invalid();auto rules=document->document.rules.rules;if(!bind_selection_predicate(rules,name,predicate))throw Error{Error::Code::NotFound,"selection predicate is not declared"};document->document.rules.rules=std::move(rules);return LIMESTONE_OK;});
+}
 extern "C" limestone_burs_analysis* limestone_burs_analyze(const limestone_burs_document* document,size_t tree,limestone_error* error) {
-  return boundary(error,[&]()->limestone_burs_analysis*{if(!document)invalid();auto& input=at(document->document.trees,tree,"tree");auto table=checked(limeburg::analyze(input.nodes,input.root,document->document.rules,true));auto analysis=std::make_unique<limestone_burs_analysis>();std::map<uint32_t,std::string> names;for(auto& [name,id]:document->document.rules.nonterminals)names[id]=name;for(auto& [node,states]:table.states)for(auto& [nt,derivation]:states)analysis->states.push_back({node,nt,derivation.rule,uint64_t(derivation.cost),names.at(nt)});analysis->attempts=std::move(table.attempts);return analysis.release();});
+  return boundary(error,[&]()->limestone_burs_analysis*{if(!document)invalid();auto snapshot=*document;document=&snapshot;auto& input=at(document->document.trees,tree,"tree");auto table=checked(limeburg::analyze(input.nodes,input.root,document->document.rules,true));auto analysis=std::make_unique<limestone_burs_analysis>();std::map<uint32_t,std::string> names;for(auto& [name,id]:document->document.rules.nonterminals)names[id]=name;for(auto& [node,states]:table.states)for(auto& [nt,derivation]:states)analysis->states.push_back({node,nt,derivation.rule,uint64_t(derivation.cost),names.at(nt)});analysis->attempts=std::move(table.attempts);return analysis.release();});
 }
 extern "C" void limestone_burs_analysis_destroy(limestone_burs_analysis* analysis){delete analysis;}
 extern "C" size_t limestone_burs_state_count(const limestone_burs_analysis* analysis){return analysis?analysis->states.size():0;}
@@ -124,7 +133,7 @@ extern "C" size_t limestone_burs_tree_count(const limestone_burs_document* docum
 extern "C" const char* limestone_burs_tree_name(const limestone_burs_document* document,size_t tree){return document&&tree<document->document.trees.size()?document->document.trees[tree].name.c_str():nullptr;}
 extern "C" const char* limestone_burs_document_text(const limestone_burs_document* document){return document?document->text.c_str():nullptr;}
 extern "C" limestone_burs_selection* limestone_burs_select(const limestone_burs_document* document,size_t index,limestone_error* error) {
-  return boundary(error,[&]()->limestone_burs_selection*{if(!document)invalid();auto& tree=at(document->document.trees,index,"tree");auto selected=checked(limeburg::select(tree.nodes,tree.root,document->document.rules,tree.nonterminal));auto region=checked(limeburg::emit_scheduler(tree.nodes,document->document.rules,selected));region.name=tree.name;schedrow::SchedulingDocument handoff;handoff.regions.push_back({region});auto text=checked(schedrow::print_schedrow(handoff));return new limestone_burs_selection{std::move(region),uint64_t(selected.cost),std::move(text)};});
+  return boundary(error,[&]()->limestone_burs_selection*{if(!document)invalid();auto snapshot=*document;document=&snapshot;auto& tree=at(document->document.trees,index,"tree");auto selected=checked(limeburg::select(tree.nodes,tree.root,document->document.rules,tree.nonterminal));auto region=checked(limeburg::emit_scheduler(tree.nodes,document->document.rules,selected));region.name=tree.name;schedrow::SchedulingDocument handoff;handoff.regions.push_back({region});auto text=checked(schedrow::print_schedrow(handoff));return new limestone_burs_selection{std::move(region),uint64_t(selected.cost),std::move(text)};});
 }
 extern "C" void limestone_burs_selection_destroy(limestone_burs_selection* selection){delete selection;}
 extern "C" uint64_t limestone_burs_selection_cost(const limestone_burs_selection* selection){return selection?selection->cost:0;}
@@ -148,6 +157,10 @@ extern "C" limestone_status limestone_schedule_issue(const limestone_schedule* s
   return boundary(error,[&](){if(!schedule||!result)invalid();auto& issue=at(schedule->issues,index,"issue");*result={issue.id,issue.cycle,int(issue.slot.has_value()),issue.slot.value_or(0)};return LIMESTONE_OK;});
 }
 extern "C" size_t limestone_schedule_resource_count(const limestone_schedule* schedule,size_t index){return schedule&&index<schedule->issues.size()?schedule->issues[index].resources.size():0;}
+extern "C" size_t limestone_schedule_slot_count(const limestone_schedule* schedule,size_t index){return schedule&&index<schedule->issues.size()?(schedule->issues[index].slot?1:0)+schedule->issues[index].additional_slots.size():0;}
+extern "C" limestone_status limestone_schedule_slot(const limestone_schedule* schedule,size_t index,size_t slot,uint32_t* value,limestone_error* error) {
+  return boundary(error,[&](){if(!schedule||!value)invalid();auto& issue=at(schedule->issues,index,"issue");if(!issue.slot||slot>issue.additional_slots.size())missing("issue slot");*value=slot?issue.additional_slots[slot-1]:*issue.slot;return LIMESTONE_OK;});
+}
 extern "C" const char* limestone_schedule_resource(const limestone_schedule* schedule,size_t index,size_t resource){return schedule&&index<schedule->issues.size()&&resource<schedule->issues[index].resources.size()?schedule->issues[index].resources[resource].c_str():nullptr;}
 extern "C" const char* limestone_schedule_text(const limestone_schedule* schedule){return schedule?schedule->text.c_str():nullptr;}
 extern "C" size_t limestone_schedule_group_count(const limestone_schedule* schedule){return schedule?schedule->groups.size():0;}
@@ -167,12 +180,24 @@ extern "C" const char* limestone_allocation_unit_name(const limestone_allocation
 extern "C" size_t limestone_allocation_function_count(const limestone_allocation_document* document,size_t unit){return document&&unit<document->units.size()?document->units[unit].functions.size():0;}
 extern "C" const char* limestone_allocation_function_name(const limestone_allocation_document* document,size_t unit,size_t function){return document&&unit<document->units.size()&&function<document->units[unit].functions.size()?document->units[unit].functions[function].name.c_str():nullptr;}
 extern "C" const char* limestone_allocation_document_text(const limestone_allocation_document* document){return document?document->text.c_str():nullptr;}
-extern "C" limestone_assignment* limestone_assignment_run(const limestone_allocation_document* document,size_t unit,size_t function,limestone_allocator algorithm,limestone_error* error) {
+namespace {
+limestone_assignment* assignment_run(const limestone_allocation_document* document,size_t unit,size_t function,limestone_allocator algorithm,const limestone_pbqp_options* options,limestone_error* error) {
   return boundary(error,[&]()->limestone_assignment*{
     if(!document)invalid();auto& source=at(document->units,unit,"unit");auto problem=function==LIMESTONE_ALLOCATION_RANGES?source.problem:checked(regtl::analyze(at(source.functions,function,"function").function)).problem;
-    auto allocation=[&](){switch(algorithm){case LIMESTONE_ALLOCATE_LINEAR:return regtl::linear_scan(problem);case LIMESTONE_ALLOCATE_GREEDY:return regtl::greedy(problem);case LIMESTONE_ALLOCATE_COLOR:return regtl::graph_color(problem);case LIMESTONE_ALLOCATE_CONSTRAINT:return regtl::constraint_allocate(problem);}throw Error{Error::Code::InvalidArgument,"unknown allocation algorithm"};}();auto result=checked(std::move(allocation));checked(regtl::verify(problem,result));
-    std::map<uint32_t,uint32_t> sorted(result.regs.begin(),result.regs.end());std::vector<std::pair<uint32_t,uint32_t>> assignments(sorted.begin(),sorted.end());std::string text=regtl::print(problem);for(auto [v,r]:assignments)text+="v"+std::to_string(v)+" -> physical "+std::to_string(r)+"\n";for(auto v:result.spilled)text+="v"+std::to_string(v)+" -> spill\n";return new limestone_assignment{std::move(result),std::move(assignments),std::move(text)};
+    auto policy=options?pbqp_options(options):source.pbqp;
+    auto allocation=[&](){switch(algorithm){case LIMESTONE_ALLOCATE_LINEAR:return regtl::linear_scan(problem);case LIMESTONE_ALLOCATE_GREEDY:return regtl::greedy(problem);case LIMESTONE_ALLOCATE_COLOR:return regtl::graph_color(problem);case LIMESTONE_ALLOCATE_CONSTRAINT:return regtl::constraint_allocate(problem);case LIMESTONE_ALLOCATE_PBQP:return regtl::pbqp_allocate(problem,policy);}throw Error{Error::Code::InvalidArgument,"unknown allocation algorithm"};}();auto result=checked(std::move(allocation));checked(regtl::verify(problem,result));auto cost=checked(regtl::allocation_cost(problem,result,policy.costs));
+    std::map<uint32_t,uint32_t> sorted(result.regs.begin(),result.regs.end());std::vector<std::pair<uint32_t,uint32_t>> assignments(sorted.begin(),sorted.end());std::string text=regtl::print(problem);for(auto [v,r]:assignments)text+="v"+std::to_string(v)+" -> physical "+std::to_string(r)+"\n";for(auto v:result.spilled)text+="v"+std::to_string(v)+" -> spill\n";return new limestone_assignment{std::move(result),std::move(assignments),std::move(text),cost};
   });
+}
+}
+extern "C" limestone_assignment* limestone_assignment_run(const limestone_allocation_document* document,size_t unit,size_t function,limestone_allocator algorithm,limestone_error* error) {
+  return assignment_run(document,unit,function,algorithm,nullptr,error);
+}
+extern "C" limestone_assignment* limestone_assignment_run_pbqp(const limestone_allocation_document* document,size_t unit,size_t function,const limestone_pbqp_options* options,limestone_error* error) {
+  return assignment_run(document,unit,function,LIMESTONE_ALLOCATE_PBQP,options,error);
+}
+extern "C" limestone_status limestone_assignment_cost(const limestone_assignment* assignment,double* cost,limestone_error* error) {
+  return boundary(error,[&](){if(!assignment||!cost)invalid();*cost=assignment->cost;return LIMESTONE_OK;});
 }
 extern "C" void limestone_assignment_destroy(limestone_assignment* assignment){delete assignment;}
 extern "C" size_t limestone_assignment_count(const limestone_assignment* assignment){return assignment?assignment->assignments.size():0;}

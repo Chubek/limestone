@@ -9,6 +9,8 @@ Result<RuleSet> from_umd(const unisel::MachineDescription& machine) {
   for(auto& p:machine.patterns) {
     Rule rule{p.id,"value",p.root_op,"value",{},p.cost,p.instruction};rule.supports_side_effects=p.supports_side_effects;rule.origin=p.origin;
     rule.constraints=p.constraints;
+    rule.host_constraints=p.host_constraints;
+    rule.fused_memory=p.fused_memory;
     std::function<Pattern(const unisel::PatternTree&)> convert=[&](auto& t) {
       Pattern pattern;pattern.op=t.op;pattern.type=t.type;pattern.immediate=t.immediate;pattern.binding=t.binding;pattern.register_class=t.register_class;
       if(t.op.empty())pattern.nonterminal="value";
@@ -30,7 +32,15 @@ Result<schedrow::Region> select_graph(const unisel::Program& source_program,cons
   }
   if(policy!=GraphPolicy::TreeOnly&&policy!=GraphPolicy::PreserveShared)return Result<schedrow::Region>::err({Error::Code::InvalidArgument,"unknown BURS graph policy"});
   if(policy==GraphPolicy::TreeOnly)for(auto& n:program.nodes)if(n.required&&uses[n.id]>1)return Result<schedrow::Region>::err({Error::Code::Unsupported,"shared computation requires an explicit DAG selection policy"});
-  std::set<uint32_t> pinned(program.outputs.begin(),program.outputs.end());for(auto& edge:program.dependencies){pinned.insert(edge.producer);pinned.insert(edge.consumer);}
+  bool memory_fusion=std::any_of(rules.rules.begin(),rules.rules.end(),[](auto& rule){return rule.fused_memory.has_value();});
+  std::map<uint32_t,size_t> positions;for(size_t k=0;k<program.nodes.size();++k)positions[program.nodes[k].id]=k;
+  auto fusible_edge=[&](const schedrow::Dependency& edge){
+    auto& a=*source.at(edge.producer);auto& b=*source.at(edge.consumer);
+    if(!memory_fusion||!a.access||!b.access||a.block!=b.block||uses[a.id]!=1||std::find(b.inputs.begin(),b.inputs.end(),a.id)==b.inputs.end()||positions[a.id]>=positions[b.id])return false;
+    for(size_t k=positions[a.id]+1;k<positions[b.id];++k){auto& node=program.nodes[k];if(node.side_effect||node.access||node.call||node.terminator||node.may_trap||node.control!=schedrow::ControlFlow::None)return false;}
+    return true;
+  };
+  std::set<uint32_t> pinned(program.outputs.begin(),program.outputs.end());for(auto& edge:program.dependencies)if(!fusible_edge(edge)){pinned.insert(edge.producer);pinned.insert(edge.consumer);}
   for(auto& b:program.blocks)pinned.insert(b.live_out.begin(),b.live_out.end());
   if(policy==GraphPolicy::TreeOnly)for(auto id:pinned)if(source.at(id)->required&&uses[id])return Result<schedrow::Region>::err({Error::Code::Unsupported,"observable intermediate requires a forest boundary adapter"});
   std::set<uint32_t> boundaries=pinned;
@@ -47,13 +57,16 @@ Result<schedrow::Region> select_graph(const unisel::Program& source_program,cons
       if(boundary) {
         if(next>std::numeric_limits<uint32_t>::max())return Result<schedrow::Region>::err({Error::Code::ResourceLimit,"BURS rule identity overflow"});
         Rule rule{static_cast<uint32_t>(next++),std::string(root_nt),node.op,std::string(root_nt),{},0,""};rule.type=node.type;rule.external_only=true;local_rules.rules.push_back(std::move(rule));
-         nodes.push_back({id,node.op,node.type,{},0,false,false,true});nodes.back().register_class=node.register_class;nodes.back().known_constant=node.constant;continue;
+         nodes.push_back({id,node.op,node.type,{},0,false,false,true});nodes.back().register_class=node.register_class;nodes.back().known_constant=node.constant;nodes.back().metadata=node.metadata;continue;
       }
       if(!visited.insert(id).second&&node.required)return Result<schedrow::Region>::err({Error::Code::Unsupported,"shared forest computation"});
       if(node.required&&node.block!=n.block)return Result<schedrow::Region>::err({Error::Code::Unsupported,"BURS forest crosses a basic block"});
-       nodes.push_back({id,node.op,node.type,node.inputs,node.constant.value_or(0),bool(node.constant),node.required,node.produces_value,node.side_effect||node.control!=schedrow::ControlFlow::None,node.access,node.call,node.terminator||(!node.block_targets.empty()),node.may_trap,node.origin,node.register_class});
+        nodes.push_back({id,node.op,node.type,node.inputs,node.constant.value_or(0),bool(node.constant),node.required,node.produces_value,node.side_effect||node.control!=schedrow::ControlFlow::None,node.access,node.call,node.terminator||(!node.block_targets.empty()),node.may_trap,node.origin,node.register_class});
+       nodes.back().metadata=node.metadata;
       work.insert(work.end(),node.inputs.begin(),node.inputs.end());
     }
+    // Predicate facts retain source declaration order, not forest traversal order.
+    std::sort(nodes.begin(),nodes.end(),[&](auto& a,auto& b){return positions.at(a.id)<positions.at(b.id);});
     auto selection=select(nodes,n.id,local_rules,root_nt);if(!selection)return Result<schedrow::Region>::err(selection.error());
     auto emitted=emit_scheduler(nodes,local_rules,selection.value());if(!emitted)return emitted;
     std::map<RuleId,const Rule*> local_rule_ids;for(auto& r:local_rules.rules)local_rule_ids[r.id]=&r;

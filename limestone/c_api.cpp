@@ -1,11 +1,14 @@
 #include "limestone.h"
 #include "limestone.hpp"
 #include "c_api_internal.hpp"
+#include "allocation_internal.hpp"
 #include "bin2bin/bin2bin.hpp"
 #include "bin2bin/runtime.hpp"
 #include "runtime.h"
 #include "optimization_internal.hpp"
 #include "object_internal.hpp"
+#include "selection_internal.hpp"
+#include "metacode/json.hpp"
 #include <cstring>
 #include <exception>
 
@@ -49,6 +52,9 @@ extern "C" limestone_target* limestone_target_load_file(const char* path,limesto
   return boundary(error,[&]()->limestone_target*{if(!path||!*path)throw limestone::Error{limestone::Error::Code::InvalidArgument,"empty UMD path"};auto document=checked(limestone::unisel::load_umd_file(path));return new limestone_target{checked(limestone::make_target(document.machine))};});
 }
 extern "C" void limestone_target_destroy(limestone_target* target){delete target;}
+extern "C" limestone_status limestone_target_set_selection_predicate(limestone_target* target,const char* name,const limestone_selection_predicate* predicate,limestone_error* error) {
+  return boundary(error,[&](){if(!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null selection target"};auto copy=target->target;auto count=bind_selection_predicate(copy.patterns,name,predicate);if(copy.burs_rules)count+=bind_selection_predicate(copy.burs_rules->rules,name,predicate);if(!count)throw limestone::Error{limestone::Error::Code::NotFound,"selection predicate is not declared"};target->target=std::move(copy);return LIMESTONE_OK;});
+}
 extern "C" limestone_status limestone_target_set_optimizer(limestone_target* target,const limestone_optimizer* optimizer,limestone_error* error) {
   return boundary(error,[&](){if(!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null optimizer target"};
     std::function<limestone::Result<limestone::unisel::Program>(const limestone::unisel::Program&)> replacement;
@@ -72,7 +78,7 @@ extern "C" limestone_status limestone_program_add_output(limestone_program* prog
   return boundary(error,[&](){if(!program)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null graph"};if(std::find(program->program.outputs.begin(),program->program.outputs.end(),id)!=program->program.outputs.end())throw limestone::Error{limestone::Error::Code::Conflict,"duplicate graph output"};program->program.outputs.push_back(id);return LIMESTONE_OK;});
 }
 extern "C" limestone_module* limestone_compile_program(const limestone_program* program,const limestone_target* target,const limestone_options* options,limestone_error* error) {
-  return boundary(error,[&]()->limestone_module*{if(!program||!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null graph or target"};return new limestone_module{checked(limestone::run_pipeline(program->program,target->target,configuration(options)))};});
+  return boundary(error,[&]()->limestone_module*{if(!program||!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null graph or target"};auto source=program->program;auto machine=target->target;auto config=configuration(options);return new limestone_module{checked(limestone::run_pipeline(source,machine,config))};});
 }
 extern "C" limestone_module* limestone_compile_umd(const char* source,const limestone_options* options,limestone_error* error) {
   return boundary(error,[&]()->limestone_module*{if(!source)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null UMD input"};auto document=checked(limestone::unisel::load_umd(source));if(!document.program)throw limestone::Error{limestone::Error::Code::InvalidArgument,"UMD has no source program"};auto target=checked(limestone::make_target(document.machine));return new limestone_module{checked(limestone::run_pipeline(*document.program,target,configuration(options)))};});
@@ -98,6 +104,9 @@ extern "C" limestone_status limestone_program_set_memory(limestone_program* prog
     limestone::schedrow::MemoryAccess memory{bool(access->read),bool(access->write),bool(access->volatile_access),bool(access->atomic),static_cast<limestone::schedrow::MemoryOrdering>(access->ordering),access->address_space,{},access->size,access->alignment};for(size_t k=0;k<access->alias_count;++k)memory.alias_sets.push_back(access->alias_sets[k]);node->access=std::move(memory);return LIMESTONE_OK;});
 }
 extern "C" limestone_configuration* limestone_configuration_create(){try{return new limestone_configuration;}catch(...){return nullptr;}}
+extern "C" limestone_status limestone_program_set_metadata(limestone_program* program,uint32_t id,const char* json,limestone_error* error) {
+  return boundary(error,[&](){if(!program)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null graph"};auto node=std::find_if(program->program.nodes.begin(),program->program.nodes.end(),[&](auto& n){return n.id==id;});if(node==program->program.nodes.end())throw limestone::Error{limestone::Error::Code::NotFound,"unknown graph node"};limestone::metacode::OperandMetadata metadata;if(json){if(std::strlen(json)>4*1024*1024)throw limestone::Error{limestone::Error::Code::ResourceLimit,"source payload size limit"};metadata=checked(limestone::metacode::load_operand_metadata(checked(limestone::metacode::parse_json(json))));}node->metadata=std::move(metadata);return LIMESTONE_OK;});
+}
 extern "C" limestone_status limestone_program_add_block(limestone_program* program,uint32_t id,const char* name,const uint32_t* successors,size_t count,const uint32_t* live_out,size_t live_count,limestone_error* error) {
   return boundary(error,[&](){if(!program||!name||(count&&!successors)||(live_count&&!live_out))throw limestone::Error{limestone::Error::Code::InvalidArgument,"invalid CFG block argument"};if(std::any_of(program->program.blocks.begin(),program->program.blocks.end(),[&](auto& b){return b.id==id;}))throw limestone::Error{limestone::Error::Code::Conflict,"duplicate CFG block"};limestone::schedrow::BasicBlock block{id,name};if(count)block.successors.assign(successors,successors+count);if(live_count)block.live_out.assign(live_out,live_out+live_count);program->program.blocks.push_back(std::move(block));if(program->program.blocks.size()==1)program->program.entry=id;return LIMESTONE_OK;});
 }
@@ -115,16 +124,22 @@ extern "C" limestone_status limestone_configuration_set_pipeline(limestone_confi
   return boundary(error,[&](){if(!config)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null configuration"};for(auto value:{optimize,schedule,allocate,encode,trace})if(value!=0&&value!=1)throw limestone::Error{limestone::Error::Code::InvalidArgument,"pipeline flags must be Boolean"};config->options.optimize=optimize;config->options.schedule=schedule;config->options.allocate=allocate;config->options.encode=encode;config->options.trace_execution=trace;return LIMESTONE_OK;});
 }
 extern "C" limestone_status limestone_configuration_set_algorithms(limestone_configuration* config,limestone_selector selector,limestone_allocator allocator,limestone_error* error) {
-  return boundary(error,[&](){if(!config||selector<LIMESTONE_SELECT_GLOBAL||selector>LIMESTONE_SELECT_BURS||allocator<LIMESTONE_ALLOCATE_LINEAR||allocator>LIMESTONE_ALLOCATE_CONSTRAINT)throw limestone::Error{limestone::Error::Code::InvalidArgument,"invalid pipeline algorithm"};config->options.selector=static_cast<limestone::SelectionStrategy>(selector);config->options.allocator=static_cast<limestone::AllocationStrategy>(allocator);return LIMESTONE_OK;});
+  return boundary(error,[&](){if(!config||selector<LIMESTONE_SELECT_GLOBAL||selector>LIMESTONE_SELECT_BURS||allocator<LIMESTONE_ALLOCATE_LINEAR||allocator>LIMESTONE_ALLOCATE_PBQP)throw limestone::Error{limestone::Error::Code::InvalidArgument,"invalid pipeline algorithm"};config->options.selector=static_cast<limestone::SelectionStrategy>(selector);config->options.allocator=static_cast<limestone::AllocationStrategy>(allocator);return LIMESTONE_OK;});
+}
+extern "C" void limestone_pbqp_options_default(limestone_pbqp_options* options) {
+  if(options)*options={1000000,8*1024*1024,50000000,1,nullptr,0,nullptr,0};
+}
+extern "C" limestone_status limestone_configuration_set_pbqp(limestone_configuration* config,const limestone_pbqp_options* options,limestone_error* error) {
+  return boundary(error,[&](){if(!config)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null configuration"};config->options.pbqp=pbqp_options(options);return LIMESTONE_OK;});
 }
 extern "C" limestone_module* limestone_compile_configured(const char* source,const limestone_configuration* config,limestone_error* error) {
   return boundary(error,[&]()->limestone_module*{if(!source)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null source"};return new limestone_module{checked(limestone::run_pipeline(source,config?config->options:limestone::PipelineOptions{}))};});
 }
 extern "C" limestone_module* limestone_compile_program_configured(const limestone_program* program,const limestone_target* target,const limestone_configuration* config,limestone_error* error) {
-  return boundary(error,[&]()->limestone_module*{if(!program||!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null graph or target"};return new limestone_module{checked(limestone::run_pipeline(program->program,target->target,config?config->options:limestone::PipelineOptions{}))};});
+  return boundary(error,[&]()->limestone_module*{if(!program||!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null graph or target"};auto source=program->program;auto machine=target->target;auto options=config?config->options:limestone::PipelineOptions{};return new limestone_module{checked(limestone::run_pipeline(source,machine,options))};});
 }
 extern "C" limestone_module* limestone_compile_target(const char* source,const limestone_target* target,const limestone_configuration* config,limestone_error* error) {
-  return boundary(error,[&]()->limestone_module*{if(!source||!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null source or target"};return new limestone_module{checked(limestone::run_pipeline(source,target->target,config?config->options:limestone::PipelineOptions{}))};});
+  return boundary(error,[&]()->limestone_module*{if(!source||!target)throw limestone::Error{limestone::Error::Code::InvalidArgument,"null source or target"};std::string input=source;auto machine=target->target;auto options=config?config->options:limestone::PipelineOptions{};return new limestone_module{checked(limestone::run_pipeline(input,machine,options))};});
 }
 extern "C" const uint8_t* limestone_module_bytes(const limestone_module* module){return module&&module->module.encoded&&!module->module.encoded->bytes.empty()?module->module.encoded->bytes.data():nullptr;}
 extern "C" size_t limestone_module_byte_count(const limestone_module* module){return module&&module->module.encoded?module->module.encoded->bytes.size():0;}

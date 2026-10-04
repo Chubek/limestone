@@ -12,7 +12,12 @@ Result<int> validate_region(const Region& input) {
   for(auto& b:input.blocks){Set seen;for(auto target:b.successors)if(!blocks.contains(target)||!seen.insert(target).second)return Result<int>::err({Error::Code::InvalidArgument,"unknown or duplicate scheduling successor"});}
   Set ids;std::map<uint32_t,const Instruction*> last;
   for(auto& i:input.instructions) {
+    for(auto& [id,metadata]:i.source_metadata){std::set<uint32_t> indices;for(auto& argument:metadata.strings)if(!indices.insert(argument.index).second||argument.value.find('\0')!=std::string::npos)return Result<int>::err({Error::Code::InvalidArgument,"invalid selected string argument"});}
     if(!ids.insert(i.id).second)return Result<int>::err({Error::Code::InvalidArgument,"duplicate scheduling instruction"});
+    if(!i.issue_width)return Result<int>::err({Error::Code::InvalidArgument,"zero instruction issue width"});
+    Set allowed_slots(i.issue_slots.begin(),i.issue_slots.end());
+    if(allowed_slots.size()!=i.issue_slots.size())return Result<int>::err({Error::Code::InvalidArgument,"duplicate instruction issue slot"});
+    if(!i.issue_slots.empty()&&i.issue_width>i.issue_slots.size())return Result<int>::err({Error::Code::Unsatisfiable,"instruction issue width exceeds its legal slot set"});
     if(!std::isfinite(i.throughput)||i.throughput<=0)return Result<int>::err({Error::Code::InvalidArgument,"invalid scheduling throughput"});
     for(auto& r:i.resources)if(!r.duration||!std::isfinite(r.quantity)||r.quantity<=0||(r.resource.empty()&&r.alternatives.empty()))return Result<int>::err({Error::Code::InvalidArgument,"invalid scheduling resource reservation"});
     for(auto& r:i.resources)for(auto& alternative:r.alternatives)if(alternative.empty())return Result<int>::err({Error::Code::InvalidArgument,"empty scheduling resource alternative"});
@@ -25,6 +30,12 @@ Result<int> validate_region(const Region& input) {
     for(auto [a,b]:i.ties)if(!defs.contains(a)||std::find(i.uses.begin(),i.uses.end(),b)==i.uses.end())return Result<int>::err({Error::Code::Conflict,"tie needs an instruction definition and use"});
     for(auto [value,latency]:i.result_latency)if(!defs.contains(value))return Result<int>::err({Error::Code::Conflict,"latency does not name an explicit instruction result"});
     for(auto [value,latency]:i.implicit_result_latency)if(std::find(i.implicit_defs.begin(),i.implicit_defs.end(),value)==i.implicit_defs.end())return Result<int>::err({Error::Code::Conflict,"latency does not name an implicit instruction result"});
+    auto bounds=[](LatencyRange range){return range.minimum<=range.maximum;};
+    if((i.latency_range&&!bounds(*i.latency_range))||(i.memory_latency&&(!bounds(*i.memory_latency)||(!i.memory&&!i.access))))return Result<int>::err({Error::Code::InvalidArgument,"invalid instruction latency range"});
+    for(auto [value,range]:i.result_latency_ranges)if(!defs.contains(value)||!bounds(range)||i.result_latency.contains(value))return Result<int>::err({Error::Code::Conflict,"invalid or duplicate explicit result latency"});
+    for(auto [value,range]:i.implicit_result_latency_ranges)if(std::find(i.implicit_defs.begin(),i.implicit_defs.end(),value)==i.implicit_defs.end()||!bounds(range)||i.implicit_result_latency.contains(value))return Result<int>::err({Error::Code::Conflict,"invalid or duplicate implicit result latency"});
+    std::set<std::tuple<ValueId,std::string,uint32_t,bool>> timings;
+    for(auto& timing:i.operand_latencies){bool defined=timing.implicit?std::find(i.implicit_defs.begin(),i.implicit_defs.end(),timing.result)!=i.implicit_defs.end():defs.contains(timing.result);if(!defined||timing.consumer_opcode.empty()||!bounds(timing.cycles)||!timings.emplace(timing.result,timing.consumer_opcode,timing.use_index,timing.implicit).second)return Result<int>::err({Error::Code::Conflict,"invalid or duplicate operand latency"});}
     for(auto& [value,klass]:i.register_classes)if(klass.empty()||(!defs.contains(value)&&std::find(i.uses.begin(),i.uses.end(),value)==i.uses.end()))return Result<int>::err({Error::Code::Conflict,"register class does not name an instruction operand"});
     bool terminal=i.terminator||(i.control!=ControlFlow::None&&i.control!=ControlFlow::Call);
     if((i.control==ControlFlow::Call&&!i.call)||(i.control!=ControlFlow::None&&i.control!=ControlFlow::Call&&!i.terminator))return Result<int>::err({Error::Code::Conflict,"control flow disagrees with instruction effects"});
@@ -40,20 +51,21 @@ Result<int> validate_region(const Region& input) {
   }
   for(auto& b:input.blocks)if(b.successors.size()>1&&(!last.contains(b.id)||last.at(b.id)->control!=ControlFlow::ConditionalBranch))return Result<int>::err({Error::Code::Conflict,"multiple scheduling successors require a conditional branch"});
   for(auto& d:input.deps)if(d.kind<DepKind::True||d.kind>DepKind::Ordering||!ids.contains(d.producer)||!ids.contains(d.consumer))return Result<int>::err({Error::Code::InvalidArgument,"invalid scheduling dependency"});
-  Set group_ids,members;std::map<InstrId,uint32_t> instruction_blocks;
+  for(auto& d:input.deps)if(d.latency_range&&d.latency_range->minimum>d.latency_range->maximum)return Result<int>::err({Error::Code::InvalidArgument,"reversed dependency latency range"});
+  Set group_ids;std::map<InstrId,uint32_t> instruction_blocks;
   for(auto& i:input.instructions)instruction_blocks[i.id]=blocks.empty()?0:i.block;
   for(auto& group:input.groups) {
     if(!group_ids.insert(group.id).second||group.kind<GroupKind::Ordered||group.kind>GroupKind::Pair||group.members.empty()||(group.kind==GroupKind::Pair&&group.members.size()!=2)||(group.kind==GroupKind::Fusion&&group.members.size()<2))return Result<int>::err({Error::Code::InvalidArgument,"invalid scheduling group"});
     if((group.issue_width||!group.issue_slots.empty())&&group.kind!=GroupKind::SameCycle&&group.kind!=GroupKind::Bundle)return Result<int>::err({Error::Code::Unsupported,"group issue constraints require a same-cycle group"});
-    if(group.issue_width&&group.members.size()>group.issue_width)return Result<int>::err({Error::Code::Unsatisfiable,"group issue width is smaller than its member count"});
     Set slots(group.issue_slots.begin(),group.issue_slots.end());if(slots.size()!=group.issue_slots.size())return Result<int>::err({Error::Code::InvalidArgument,"duplicate group issue slot"});
     Set seen;std::optional<uint32_t> block;
     for(auto id:group.members) {
       if(!ids.contains(id)||!seen.insert(id).second)return Result<int>::err({Error::Code::InvalidArgument,"unknown or duplicate scheduling group member"});
       if(block&&*block!=instruction_blocks.at(id))return Result<int>::err({Error::Code::Unsupported,"scheduling group crosses a block boundary"});
       block=instruction_blocks.at(id);
-      if(group.kind!=GroupKind::Ordered&&!members.insert(id).second)return Result<int>::err({Error::Code::Unsupported,"overlapping scheduling units"});
     }
+    uint64_t width=0;for(auto id:group.members)width+=std::find_if(input.instructions.begin(),input.instructions.end(),[&](auto& i){return i.id==id;})->issue_width;
+    if(group.issue_width&&width>group.issue_width)return Result<int>::err({Error::Code::Unsatisfiable,"group issue width is smaller than its slot demand"});
   }
   return Result<int>::ok(0);
 }

@@ -6,7 +6,7 @@ namespace limestone::regtl {
 namespace {
 struct Group { std::vector<VReg> values; std::vector<PReg> allowed; bool spillable=true; std::set<size_t> neighbors; };
 bool alias(const Program& p,PReg a,PReg b) {
-  return a==b||std::any_of(p.aliases.begin(),p.aliases.end(),[&](auto e){return e==std::pair{a,b}||e==std::pair{b,a};});
+  return registers_overlap(p,a,b);
 }
 Result<std::vector<Group>> groups(const Program& p) {
   auto valid=validate(p);if(!valid)return Result<std::vector<Group>>::err(valid.error());
@@ -17,21 +17,13 @@ Result<std::vector<Group>> groups(const Program& p) {
   auto ranges=p.ranges;std::sort(ranges.begin(),ranges.end(),[](auto& a,auto& b){return a.value<b.value;});
   for(auto& r:ranges) {
     auto leader=root(r.value);auto [it,added]=index.emplace(leader,result.size());if(added)result.emplace_back();auto& g=result[it->second];
-    std::vector<PReg> allowed;
-    for(auto& klass:p.classes)if(klass.name==r.klass)for(auto reg:klass.members) {
-      if(r.constraint.fixed&&*r.constraint.fixed!=reg)continue;
-      if(!r.constraint.allowed.empty()&&std::find(r.constraint.allowed.begin(),r.constraint.allowed.end(),reg)==r.constraint.allowed.end())continue;
-      if(std::find(r.constraint.forbidden.begin(),r.constraint.forbidden.end(),reg)!=r.constraint.forbidden.end())continue;
-      if(std::any_of(p.reserved.begin(),p.reserved.end(),[&](auto reserved){return alias(p,reg,reserved);}))continue;
-      bool clobbered=false;for(auto& c:p.clobbers)if(r.begin<c.position&&c.position<r.end)for(auto x:c.registers)clobbered|=alias(p,reg,x);
-      if(!clobbered)allowed.push_back(reg);
-    }
-    std::sort(allowed.begin(),allowed.end());
+    auto allowed=allowed_registers(p,r);
     if(g.values.empty())g.allowed=allowed;
     else {std::vector<PReg> intersection;std::set_intersection(g.allowed.begin(),g.allowed.end(),allowed.begin(),allowed.end(),std::back_inserter(intersection));g.allowed=std::move(intersection);}
     g.values.push_back(r.value);g.spillable&=r.spillable&&!r.constraint.fixed;
   }
   for(auto [a,b]:p.ties){result[index.at(root(a))].spillable=false;}
+  for(auto& tuple:p.tuples)for(auto value:tuple.values)result[index.at(root(value))].spillable=false;
   for(size_t i=0;i<ranges.size();++i)for(size_t j=i+1;j<ranges.size();++j) {
     auto& a=ranges[i];auto& b=ranges[j];bool interfere=a.begin<=b.end&&b.begin<=a.end;
     if(p.explicit_interference)interfere=std::any_of(p.interference.begin(),p.interference.end(),[&](auto e){return e==std::pair{a.value,b.value}||e==std::pair{b.value,a.value};});
@@ -44,6 +36,8 @@ Result<std::vector<Group>> groups(const Program& p) {
 Result<Allocation> color(const Program& p,size_t budget,bool exact) {
   auto grouped=groups(p);if(!grouped)return Result<Allocation>::err(grouped.error());auto& gs=grouped.value();
   std::vector<std::optional<PReg>> assigned(gs.size());std::vector<bool> done(gs.size());size_t visits=0;bool exhausted=false;
+  std::map<VReg,size_t> owners;for(size_t k=0;k<gs.size();++k)for(auto value:gs[k].values)owners[value]=k;
+  auto tuples_fit=[&]{for(auto& tuple:p.tuples){bool feasible=false;for(auto& alternative:tuple.alternatives){bool matches=true;for(size_t k=0;k<tuple.values.size();++k){auto owner=owners.at(tuple.values[k]);matches&=!done[owner]||(assigned[owner]&&*assigned[owner]==alternative[k]);}feasible|=matches;}if(!feasible)return false;}return true;};
   std::function<bool(size_t)> search=[&](size_t depth) {
     if(depth==gs.size())return true;
     if(++visits>budget){exhausted=true;return false;}
@@ -57,7 +51,7 @@ Result<Allocation> color(const Program& p,size_t budget,bool exact) {
     for(auto reg:g.allowed) {
       bool busy=false;for(auto neighbor:g.neighbors)if(assigned[neighbor]&&alias(p,reg,*assigned[neighbor]))busy=true;
       if(busy)continue;assigned[best]=reg;
-      if(search(depth+1))return true;assigned[best].reset();if(exhausted)break;
+      if(tuples_fit()&&search(depth+1))return true;assigned[best].reset();if(exhausted)break;
       if(!exact)break;
     }
     if(!exhausted&&g.spillable&&search(depth+1))return true;

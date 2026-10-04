@@ -97,12 +97,47 @@ struct Environment;
 struct Closure { E expression; std::shared_ptr<const Environment> environment; };
 struct Environment { std::map<std::string,Closure> bindings; };
 struct Value { std::optional<int64_t> integer; Closure function; std::string primitive;std::optional<uint32_t> trace_value; };
+struct Continuation {
+  enum class Kind { Primitive, If, Begin } kind;
+  Closure owner;
+  std::vector<Closure> pending, operands;
+  std::vector<int64_t> values;
+  std::string primitive;
+  size_t next=0;
+  std::vector<uint32_t> trace_inputs;
+};
+struct MachineState { Closure control;std::vector<Closure> arguments;std::vector<Continuation> continuations;std::optional<Value> returned; };
+}
+struct RuntimeValueStorage { Value value; };
+struct RuntimeProgramStorage { Program program; };
+struct GuardState {
+  MachineState state;
+  Closure branch;
+  bool expected=false;
+  std::vector<E> following;
+  std::vector<Closure> final_arguments;
+  ExecutionResult prefix;
+  uint64_t next_value=1;
+  std::optional<uint32_t> condition_value;
+};
+struct RuntimeAccess {
+  static RuntimeValue value(Value value){return RuntimeValue(std::make_shared<RuntimeValueStorage>(RuntimeValueStorage{std::move(value)}));}
+  static RuntimeProgram program(Program program){return RuntimeProgram(std::make_shared<RuntimeProgramStorage>(RuntimeProgramStorage{std::move(program)}));}
+  static GuardSnapshot guard(GuardState state){return GuardSnapshot(std::make_shared<GuardState>(std::move(state)));}
+  static auto& get(const RuntimeValue& value){return value.storage_;}
+  static auto& get(const RuntimeProgram& program){return program.storage_;}
+  static auto& get(const GuardSnapshot& guard){return guard.storage_;}
+};
+namespace {
 struct Evaluator {
   size_t remaining;
   const ExecutionOptions& options;
   ExecutionResult execution;
   uint64_t next_value=1;
   size_t events=0;
+  std::vector<GuardSnapshot> guards;
+  std::vector<E> following;
+  std::vector<Closure> final_arguments;
   std::optional<uint32_t> record(TraceEvent::Kind kind,const E& e,std::string operation={},std::optional<int64_t> result={},std::vector<uint32_t> inputs={},std::optional<bool> taken={}) {
     if(!options.record_trace&&!options.observer)return {};
     if(events++>=options.event_limit)fail(e,"trace event limit reached",Error::Code::ResourceLimit);
@@ -126,20 +161,11 @@ struct Evaluator {
       }
       return result;
   }
-  Value eval(const E& initial,std::shared_ptr<const Environment> initial_env) {
-    struct Continuation {
-      enum class Kind { Primitive, If, Begin } kind;
-      Closure owner;
-      std::vector<Closure> pending, operands;
-      std::vector<int64_t> values;
-      std::string primitive;
-      size_t next=0;
-      std::vector<uint32_t> trace_inputs;
-    };
-    Closure control{initial,std::move(initial_env)};
-    std::vector<Closure> arguments;
-    std::vector<Continuation> continuations;
-    std::optional<Value> returned;
+  Value eval(const E& initial,std::shared_ptr<const Environment> initial_env,std::vector<Closure> arguments={}) {
+    return eval_state({{initial,std::move(initial_env)},std::move(arguments)});
+  }
+  Value eval_state(MachineState state) {
+    auto& control=state.control;auto& arguments=state.arguments;auto& continuations=state.continuations;auto& returned=state.returned;
     // Krivine transitions use an explicit argument/continuation stack. Even
     // divergent terms consume the step budget without exhausting the C++ stack.
     for(;;) {
@@ -157,6 +183,7 @@ struct Evaluator {
           arguments=std::move(frame.pending);continuations.pop_back();returned=Value{result,{},{},traced};
         }else if(frame.kind==Continuation::Kind::If) {
           if(!returned->integer)fail(frame.owner.expression,"conditional requires an integer");
+          if(options.record_guards){if(guards.size()>=options.event_limit)fail(frame.owner.expression,"guard snapshot limit reached",Error::Code::ResourceLimit);GuardState snapshot;snapshot.state=state;snapshot.state.continuations.pop_back();snapshot.state.arguments=frame.pending;snapshot.state.returned.reset();snapshot.branch=frame.owner;snapshot.expected=bool(*returned->integer);snapshot.following=following;snapshot.final_arguments=final_arguments;snapshot.prefix=execution;snapshot.next_value=next_value;snapshot.condition_value=returned->trace_value;guards.push_back(RuntimeAccess::guard(std::move(snapshot)));}
           record(TraceEvent::Kind::Branch,frame.owner.expression,"if",{},returned->trace_value?std::vector<uint32_t>{*returned->trace_value}:std::vector<uint32_t>{},bool(*returned->integer));
           control={frame.owner.expression->children[*returned->integer?1:2],frame.owner.environment};
           arguments=std::move(frame.pending);continuations.pop_back();returned.reset();
@@ -258,5 +285,72 @@ Result<std::string> lower_checked(const Program& p) {
 }
 std::string lower_to_machineir(const Program& p) {
   auto r=lower_checked(p);if(!r)throw std::invalid_argument(r.error().message);return r.value();
+}
+RuntimeValue RuntimeValue::integer(int64_t value){return RuntimeAccess::value(Value{value});}
+std::optional<int64_t> RuntimeValue::integer() const {return storage_?storage_->value.integer:std::nullopt;}
+bool RuntimeValue::callable() const {return storage_&&(storage_->value.function.expression||!storage_->value.primitive.empty());}
+bool GuardSnapshot::expected() const {return storage_&&storage_->expected;}
+size_t GuardSnapshot::offset() const {return storage_?storage_->branch.expression->offset:0;}
+Result<RuntimeProgram> lower_runtime(const Program& program,size_t node_limit) {
+  auto valid=verify(program);if(!valid)return Result<RuntimeProgram>::err(valid.error());
+  try {
+    Program snapshot;std::map<const Expr*,E> copied;
+    auto copy=[&](auto&& self,const E& expression)->E {
+      if(copied.contains(expression.get()))return copied.at(expression.get());
+      if(!node_limit)throw Error{Error::Code::ResourceLimit,"TraceLambda runtime node limit"};--node_limit;
+      auto result=std::make_shared<Expr>(*expression);result->children.clear();copied[expression.get()]=result;
+      for(auto& child:expression->children)result->children.push_back(self(self,child));return result;
+    };
+    for(auto& form:program.forms)snapshot.forms.push_back(copy(copy,form));return Result<RuntimeProgram>::ok(RuntimeAccess::program(std::move(snapshot)));
+  }catch(const Error& error){return Result<RuntimeProgram>::err(error);}
+  catch(const std::bad_alloc&){return Result<RuntimeProgram>::err({Error::Code::ResourceLimit,"TraceLambda runtime allocation failed"});}
+}
+namespace {
+Closure runtime_closure(const RuntimeValue& value) {
+  auto& storage=RuntimeAccess::get(value);if(!storage)throw Error{Error::Code::InvalidArgument,"empty TraceLambda runtime value"};auto& source=storage->value;
+  if(source.function.expression)return source.function;
+  auto expression=std::make_shared<Expr>();
+  if(source.integer){expression->kind=Expr::Kind::Integer;expression->integer=*source.integer;}
+  else {expression->kind=Expr::Kind::Symbol;expression->atom=source.primitive;}
+  return {std::move(expression),{}};
+}
+std::vector<Closure> runtime_arguments(std::span<const RuntimeValue> input) {
+  std::vector<Closure> result;result.reserve(input.size());for(auto i=input.rbegin();i!=input.rend();++i)result.push_back(runtime_closure(*i));return result;
+}
+RuntimeResult runtime_result(Evaluator& evaluator,Value value,const E& expression) {
+  if(value.integer){evaluator.execution.value=*value.integer;evaluator.execution.result_value=value.trace_value;}
+  evaluator.record(TraceEvent::Kind::Return,expression,"return",{},value.trace_value?std::vector<uint32_t>{*value.trace_value}:std::vector<uint32_t>{});
+  return {RuntimeAccess::value(std::move(value)),std::move(evaluator.execution),std::move(evaluator.guards)};
+}
+template<class Function> Result<RuntimeResult> runtime_checked(Function&& function) {
+  try{return Result<RuntimeResult>::ok(function());}
+  catch(const Error& error){return Result<RuntimeResult>::err(error);}
+  catch(const std::bad_alloc&){return Result<RuntimeResult>::err({Error::Code::ResourceLimit,"TraceLambda runtime allocation failed"});}
+  catch(const std::exception& error){return Result<RuntimeResult>::err({Error::Code::Internal,std::string("TraceLambda runtime callback: ")+error.what()});}
+  catch(...){return Result<RuntimeResult>::err({Error::Code::Internal,"TraceLambda runtime callback exception"});}
+}
+}
+Result<RuntimeResult> run_runtime(const RuntimeProgram& program,std::span<const RuntimeValue> arguments,const ExecutionOptions& options) {
+  return runtime_checked([&] {
+    auto& storage=RuntimeAccess::get(program);if(!storage)throw Error{Error::Code::InvalidArgument,"empty TraceLambda runtime program"};auto& forms=storage->program.forms;
+    Evaluator evaluator{options.step_limit,options};evaluator.final_arguments=runtime_arguments(arguments);Value result;
+    for(size_t k=0;k<forms.size();++k){evaluator.following.assign(forms.begin()+k+1,forms.end());result=evaluator.eval(forms[k],{},k+1==forms.size()?evaluator.final_arguments:std::vector<Closure>{});}
+    return runtime_result(evaluator,std::move(result),forms.back());
+  });
+}
+Result<RuntimeResult> apply_runtime(const RuntimeValue& function,std::span<const RuntimeValue> arguments,const ExecutionOptions& options) {
+  return runtime_checked([&] {auto closure=runtime_closure(function);Evaluator evaluator{options.step_limit,options};auto value=evaluator.eval(closure.expression,closure.environment,runtime_arguments(arguments));return runtime_result(evaluator,std::move(value),closure.expression);});
+}
+Result<RuntimeResult> resume_guard(const GuardSnapshot& guard,int64_t condition,const ExecutionOptions& options) {
+  return runtime_checked([&] {
+    auto& storage=RuntimeAccess::get(guard);if(!storage)throw Error{Error::Code::InvalidArgument,"empty TraceLambda guard snapshot"};auto state=storage->state;
+    state.control={storage->branch.expression->children[condition?1:2],storage->branch.environment};
+    Evaluator evaluator{options.step_limit,options};evaluator.execution=storage->prefix;evaluator.next_value=storage->next_value;evaluator.following=storage->following;evaluator.final_arguments=storage->final_arguments;
+    if(!options.record_trace)evaluator.execution.trace.clear();evaluator.events=evaluator.execution.trace.size();
+    evaluator.record(TraceEvent::Kind::Branch,storage->branch.expression,"if",{},storage->condition_value?std::vector<uint32_t>{*storage->condition_value}:std::vector<uint32_t>{},bool(condition));
+    auto result=evaluator.eval_state(std::move(state));
+    for(size_t k=0;k<storage->following.size();++k){evaluator.following.assign(storage->following.begin()+k+1,storage->following.end());result=evaluator.eval(storage->following[k],{},k+1==storage->following.size()?storage->final_arguments:std::vector<Closure>{});}
+    return runtime_result(evaluator,std::move(result),storage->following.empty()?storage->branch.expression:storage->following.back());
+  });
 }
 }

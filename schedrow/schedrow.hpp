@@ -1,9 +1,16 @@
 #pragma once
 #include "../limestone/foundation.hpp"
+#include "../metacode/operand_constraints.hpp"
 namespace limestone::schedrow {
 using InstrId=uint32_t; using ValueId=uint32_t;
 enum class DepKind { True, Anti, Output, Memory, Control, Ordering };
-struct Dependency { InstrId producer, consumer; DepKind kind; uint32_t latency=0, distance=0; bool scheduler_only=false; };
+// Bounds are retained for inspection; static schedules use the maximum. An
+// optimistic/observed latency needs a separate runtime recovery contract.
+struct LatencyRange { uint32_t minimum=0, maximum=0; bool operator==(const LatencyRange&) const = default; };
+struct Dependency { InstrId producer, consumer; DepKind kind; uint32_t latency=0, distance=0; bool scheduler_only=false; std::optional<LatencyRange> latency_range; };
+// Producer result -> a particular use of a concrete consumer opcode. SSA and
+// architectural results retain separate identities, including after allocation.
+struct OperandLatency { ValueId result=0; std::string consumer_opcode; uint32_t use_index=0; LatencyRange cycles; bool implicit=false; };
 struct ResourceUse { std::string resource; uint32_t duration=1; double quantity=1; uint32_t offset=0; std::vector<std::string> alternatives; };
 enum class MemoryOrdering { Relaxed, Acquire, Release, AcquireRelease, Sequential };
 enum class ControlFlow { None, Branch, ConditionalBranch, Return, IndirectBranch, Trap, Call };
@@ -36,12 +43,20 @@ struct Instruction {
       std::vector<uint32_t> block_targets;
        ControlFlow control=ControlFlow::None;
        // Architectural register IDs occupy a separate latency domain from SSA IDs.
-       std::unordered_map<ValueId,uint32_t> implicit_result_latency;
+        std::unordered_map<ValueId,uint32_t> implicit_result_latency;
+        // Number of distinct issue slots consumed in the issue cycle.
+         uint32_t issue_width=1;
+         std::optional<LatencyRange> latency_range, memory_latency;
+         std::unordered_map<ValueId,LatencyRange> result_latency_ranges, implicit_result_latency_ranges;
+          std::vector<OperandLatency> operand_latencies;
+          // Covered source identities retain target-defined literals/properties.
+          std::map<ValueId,metacode::OperandMetadata> source_metadata;
 };
+LatencyRange latency_bounds(const Instruction&);
+LatencyRange latency_bounds(const Instruction&,ValueId result,bool implicit,const Instruction* consumer=nullptr,uint32_t use_index=0);
 struct BasicBlock { uint32_t id; std::string name; std::vector<uint32_t> successors; std::vector<ValueId> live_out; };
 enum class GroupKind { Ordered, Adjacent, SameCycle, Bundle, Atomic, Fusion, Pair };
-// Members are in emission order. Non-ordered groups are disjoint scheduling
-// units within a block; ordered groups may overlap any unit. Fusion preserves
+// Members are in emission order. Groups may overlap within a block. Fusion preserves
 // adjacency and target hints without changing instruction semantics or resources.
 struct InstructionGroup {
   uint32_t id; GroupKind kind=GroupKind::Ordered; std::vector<InstrId> members;
@@ -49,8 +64,8 @@ struct InstructionGroup {
   uint32_t issue_width=0; std::vector<uint32_t> issue_slots;
 };
 struct Region { std::string name; std::vector<Instruction> instructions; std::vector<Dependency> deps; std::vector<BasicBlock> blocks; uint32_t entry=0; std::vector<InstructionGroup> groups; };
-struct MachineModel { std::unordered_map<std::string,uint32_t> resource_capacity; uint32_t issue_width=0; bool critical_path=false; std::vector<std::pair<uint32_t,uint32_t>> register_aliases; };
-struct Scheduled { InstrId id; uint32_t cycle; std::optional<uint32_t> slot; std::vector<std::string> resources; };
+struct MachineModel { std::unordered_map<std::string,uint32_t> resource_capacity; uint32_t issue_width=0; bool critical_path=false; std::vector<std::pair<uint32_t,uint32_t>> register_aliases; size_t group_search_limit=1000000; size_t verification_limit=1000000; };
+struct Scheduled { InstrId id; uint32_t cycle; std::optional<uint32_t> slot; std::vector<std::string> resources; std::vector<uint32_t> additional_slots; };
 // Structural/effect contracts, independent of a microarchitecture or schedule.
 Result<int> validate_region(const Region&);
 // Check a sequential emission order against semantic and generated hazards,

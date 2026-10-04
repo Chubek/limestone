@@ -30,6 +30,7 @@ struct ExecutionOptions {
   std::function<bool()> cancelled;
   // Synchronous observer; events are borrowed and callbacks may not mutate IR.
   std::function<void(const TraceEvent&)> observer;
+  bool record_guards=false;
 };
 struct ExecutionResult {
   int64_t value=0;size_t steps=0;
@@ -52,4 +53,53 @@ PortableLowering lower_graph(int64_t value);
 // Closed recorded execution -> checked arithmetic and guard pseudo-operations.
 // Guard failures require a backend deoptimization implementation before encoding.
 Result<PortableLowering> lower_trace(const ExecutionResult&);
+
+struct RuntimeValueStorage;
+struct RuntimeProgramStorage;
+struct GuardState;
+struct RuntimeAccess;
+// Immutable owning runtime values. Function values retain lexical environments
+// and lazy argument closures; source ASTs may be destroyed or edited afterwards.
+class RuntimeValue {
+  std::shared_ptr<const RuntimeValueStorage> storage_;
+  explicit RuntimeValue(std::shared_ptr<const RuntimeValueStorage> storage):storage_(std::move(storage)){}
+  friend struct RuntimeAccess;
+public:
+  RuntimeValue()=default;
+  static RuntimeValue integer(int64_t);
+  std::optional<int64_t> integer() const;
+  bool callable() const;
+};
+class RuntimeProgram {
+  std::shared_ptr<const RuntimeProgramStorage> storage_;
+  explicit RuntimeProgram(std::shared_ptr<const RuntimeProgramStorage> storage):storage_(std::move(storage)){}
+  friend struct RuntimeAccess;
+public:
+  RuntimeProgram()=default;
+};
+// Safepoint after evaluating an if condition. The snapshot owns the lexical
+// environment, pending applications, strict primitive/sequence continuations,
+// and following top-level forms. No native stack addresses are retained.
+class GuardSnapshot {
+  std::shared_ptr<const GuardState> storage_;
+  explicit GuardSnapshot(std::shared_ptr<const GuardState> storage):storage_(std::move(storage)){}
+  friend struct RuntimeAccess;
+public:
+  GuardSnapshot()=default;
+  bool expected() const;
+  size_t offset() const;
+};
+struct RuntimeResult {
+  RuntimeValue value;
+  ExecutionResult execution;
+  std::vector<GuardSnapshot> guards;
+};
+Result<RuntimeProgram> lower_runtime(const Program&,size_t node_limit=100000);
+// Runtime arguments are applied to the final form. Application stays lazy and
+// lexical; earlier forms are evaluated in declaration order as in execute().
+Result<RuntimeResult> run_runtime(const RuntimeProgram&,std::span<const RuntimeValue> arguments={},const ExecutionOptions& = {});
+Result<RuntimeResult> apply_runtime(const RuntimeValue&,std::span<const RuntimeValue>,const ExecutionOptions& = {});
+// The backend supplies the actual condition at the safepoint. Restoration is
+// synchronous and transactional; callbacks/observers follow execute()'s rules.
+Result<RuntimeResult> resume_guard(const GuardSnapshot&,int64_t condition,const ExecutionOptions& = {});
 }

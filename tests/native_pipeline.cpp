@@ -13,7 +13,7 @@ int main(int argc,char** argv){return test_main([&]{
   auto physical=target.instructions.at("CONST").fixed_definitions.at(0);std::map<uint32_t,std::string> names;for(auto& r:target.register_classes[0].members)names[r]=r==physical?"rax":"r10";
   auto other=std::find_if(names.begin(),names.end(),[&](auto& item){return item.first!=physical;})->first;
   PipelineOptions options;options.allocate=options.encode=true;
-  for(auto selector:{SelectionStrategy::Global,SelectionStrategy::Greedy,SelectionStrategy::BURS})for(auto allocator:{AllocationStrategy::LinearScan,AllocationStrategy::Greedy,AllocationStrategy::GraphColoring,AllocationStrategy::Constraint}) {
+  for(auto selector:{SelectionStrategy::Global,SelectionStrategy::Greedy,SelectionStrategy::BURS})for(auto allocator:{AllocationStrategy::LinearScan,AllocationStrategy::Greedy,AllocationStrategy::GraphColoring,AllocationStrategy::Constraint,AllocationStrategy::PBQP}) {
     options.selector=selector;options.allocator=allocator;
     for(auto expression:{"((lambda x (add x 2)) 40)","(if 0 (add 9223372036854775807 1) -42)","-2147483648","2147483647"}) {
       auto module=take(run_pipeline(expression,target,options));auto expected=take(traceml::evaluate(take(traceml::compile(expression))));

@@ -3,6 +3,7 @@
 #include "native_fixture.h"
 #include <assert.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <string.h>
 
 #define ALIGNOF(T) offsetof(struct { char byte;T value; },value)
@@ -21,6 +22,16 @@ static int32_t echo_i32(int32_t value){return value;}
 static uint32_t echo_u32(uint32_t value){return value;}
 static int64_t echo_i64(int64_t value){return value;}
 static uint64_t echo_u64(uint64_t value){return value;}
+static struct exl_fixture_pair pair_variadic(struct exl_fixture_pair initial,...) {
+  va_list arguments;struct exl_fixture_pair value;va_start(arguments,initial);value=va_arg(arguments,struct exl_fixture_pair);va_end(arguments);
+  initial.count+=value.count;initial.weight+=value.weight;return initial;
+}
+static struct exl_fixture_large large_variadic(int64_t count,...) {
+  va_list arguments;struct exl_fixture_large result={{0},0};int64_t index;size_t field;
+  va_start(arguments,count);
+  for(index=0;index<count;++index){struct exl_fixture_large value=va_arg(arguments,struct exl_fixture_large);for(field=0;field<8;++field)result.values[field]+=value.values[field];result.weight+=value.weight;}
+  va_end(arguments);return result;
+}
 #define ECHO(KIND,T,FUNCTION,MINIMUM,MAXIMUM) do { \
   exl_native_type_t *type=scalar(KIND);const exl_native_type_t *args[]={type};exl_data_signature_t signature={type,args,1}; \
   T value=(MINIMUM),result=0;exl_data_argument_t argument={&value,sizeof(value)}; \
@@ -55,6 +66,30 @@ int main(int argc,char **argv) {
   arguments[0]=large;arguments[1]=large;bind(context,library,"large","exl_fixture_data_large",large,arguments,2);
   arguments[0]=pointer;bind(context,library,"reenter","exl_fixture_native_reenter",i64,arguments,1);
   {
+    exl_native_type_t *integer=scalar(EXL_NATIVE_I32);const exl_native_type_t *types[20];size_t index;
+    exl_data_signature_t signature={pair,types,20};types[0]=f32;types[1]=i64;
+    for(index=2;index<20;index+=6){types[index]=pair;types[index+1]=hfa;types[index+2]=large;types[index+3]=integer;types[index+4]=f64;types[index+5]=pointer;}
+    assert(exl_library_bind_data_variadic(context,library,"var_data","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==0);
+    assert(exl_library_bind_data_variadic(context,library,"var_data","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==-2);
+    assert(exl_library_bind_data_variadic(context,library,"missing_var","missing",&signature,2,EXL_CC_HOST)==-2);
+    assert(exl_library_bind_data_variadic(context,NULL,"bad_library","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==-1);
+    assert(exl_library_bind_data_variadic(context,library,"bad_count","exl_fixture_data_variadic",&signature,0,EXL_CC_HOST)==-1);
+    assert(exl_library_bind_data_variadic(context,library,"bad_count","exl_fixture_data_variadic",&signature,21,EXL_CC_HOST)==-1);
+    assert(exl_library_bind_data_variadic(context,library,"bad_cc","exl_fixture_data_variadic",&signature,2,EXL_CC_STDCALL)==-4);
+    types[4]=f32;assert(exl_library_bind_data_variadic(context,library,"unpromoted","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==-1);
+    types[4]=i8;assert(exl_library_bind_data_variadic(context,library,"unpromoted","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==-1);
+    types[4]=u16;assert(exl_library_bind_data_variadic(context,library,"unpromoted","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==-1);
+    types[4]=large;signature.argument_count=2;types[0]=types[1]=pair;
+    assert(exl_register_native_data_variadic(context,"pair_var",(exl_native_address_t)pair_variadic,&signature,1,EXL_CC_HOST)==0);
+    signature.argument_count=20;types[0]=f32;types[1]=i64;
+    assert(exl_library_bind_data_variadic(context,library,"unpromoted","exl_fixture_data_variadic",&signature,2,EXL_CC_HOST)==0);
+    signature.result_type=large;signature.argument_count=3;types[0]=i64;types[1]=types[2]=large;
+    assert(exl_register_native_data_variadic(context,"large_var",(exl_native_address_t)large_variadic,&signature,1,EXL_CC_HOST)==0);
+    signature.argument_count=1;
+    assert(exl_register_native_data_variadic(context,"empty_var",(exl_native_address_t)large_variadic,&signature,1,EXL_CC_HOST)==0);
+    exl_native_type_destroy(integer);
+  }
+  {
     exl_native_type_t *output=pair;const exl_native_type_t *bad_fields[]={void_type};exl_data_signature_t invalid={lanes,arguments,1};
     assert(exl_native_type_struct(bad_fields,1,&output)==-1&&output==pair);
     assert(exl_native_type_array(void_type,2,&output)==-1&&output==pair);
@@ -69,6 +104,22 @@ int main(int argc,char **argv) {
   exl_native_type_destroy(i8);exl_native_type_destroy(u16);exl_native_type_destroy(i64);exl_native_type_destroy(f32);exl_native_type_destroy(f64);exl_native_type_destroy(pointer);
   exl_native_type_destroy(pair);exl_native_type_destroy(small);exl_native_type_destroy(hfa);exl_native_type_destroy(lanes);exl_native_type_destroy(nested);exl_native_type_destroy(values);exl_native_type_destroy(large);exl_native_type_destroy(void_type);
   {
+    struct exl_fixture_pair pair_value={3,2},result={-1,-1};struct exl_fixture_hfa lanes_value={1,2,3,4};struct exl_fixture_large large_value={{5},3};
+    int32_t integer=-2,pointed=4;void *pointer_value=&pointed;double weight=0.5;float bias=0.5f;int64_t count=3;size_t index;
+    exl_data_argument_t args[20];args[0].data=&bias;args[0].size=sizeof(bias);args[1].data=&count;args[1].size=sizeof(count);
+    for(index=2;index<20;index+=6){
+      args[index].data=&pair_value;args[index].size=sizeof(pair_value);args[index+1].data=&lanes_value;args[index+1].size=sizeof(lanes_value);
+      args[index+2].data=&large_value;args[index+2].size=sizeof(large_value);args[index+3].data=&integer;args[index+3].size=sizeof(integer);
+      args[index+4].data=&weight;args[index+4].size=sizeof(weight);args[index+5].data=&pointer_value;args[index+5].size=sizeof(pointer_value);
+    }
+    assert(exl_call_data(context,"var_data",args,20,&result,sizeof(result))==0&&result.count==30&&result.weight==47);
+    result.count=-1;assert(exl_call_data(context,"var_data",args,19,&result,sizeof(result))==-1&&result.count==-1);
+    args[2].size--;assert(exl_call_data(context,"var_data",args,20,&result,sizeof(result))==-1&&result.count==-1);args[2].size++;
+    assert(exl_call_data(context,"var_data",args,20,&pair_value,sizeof(pair_value))==0&&pair_value.count==30&&pair_value.weight==47);
+    args[0].data=args[1].data=&pair_value;args[0].size=args[1].size=sizeof(pair_value);
+    assert(exl_call_data(context,"pair_var",args,2,&result,sizeof(result))==0&&result.count==60&&result.weight==94);
+  }
+  {
     struct exl_fixture_pair input={20,3.5},result={0,0};int64_t delta=22;double factor=2;exl_data_argument_t args[]={{&input,sizeof(input)},{&delta,sizeof(delta)},{&factor,sizeof(factor)}};
     assert(exl_call_data(context,"pair",args,3,&result,sizeof(result))==0&&result.count==42&&result.weight==7);
     assert(exl_call_data(context,"pair",args,3,&input,sizeof(input))==0&&input.count==42&&input.weight==7);
@@ -76,6 +127,14 @@ int main(int argc,char **argv) {
     args[0].size++;assert(exl_call_data(context,"pair",args,2,&result,sizeof(result))==-1&&result.count==123);
     assert(exl_call_data(context,"pair",args,3,&result,sizeof(result)-1)==-1&&result.count==123);
     assert(exl_call_data(context,"absent",args,3,&result,sizeof(result))==-2&&result.count==123);
+  }
+  {
+    struct exl_fixture_large input={{1,2,3,4,5,6,7,8},2.5},result;int64_t count=2;size_t index;
+    exl_data_argument_t args[]={{&count,sizeof(count)},{&input,sizeof(input)},{&input,sizeof(input)}};
+    assert(exl_call_data(context,"large_var",args,3,&result,sizeof(result))==0&&result.weight==5);
+    for(index=0;index<8;++index)assert(result.values[index]==2*input.values[index]);
+    count=0;assert(exl_call_data(context,"empty_var",args,1,&result,sizeof(result))==0&&result.weight==0);
+    for(index=0;index<8;++index)assert(result.values[index]==0);
   }
   {
     struct exl_fixture_small input={-7,65534},result;unsigned char unaligned[sizeof(input)+1];exl_data_argument_t arg={unaligned+1,sizeof(input)};

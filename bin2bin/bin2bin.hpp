@@ -29,8 +29,18 @@ struct Instruction {
   ControlFlow control=ControlFlow::Fallthrough;
   std::optional<uint64_t> branch_target;
 };
-// Explicit fixed8 and masked forms share this architecture contract.
-// Richer native encoding formats require a separate decoder/encoder adapter.
+struct DecodedOperands { uint32_t form; std::map<std::string,std::string> operands; };
+// Native encodings have target-declared form lengths and semantic operands. The
+// adapter owns prefix/ModRM/scattered-field logic; the framework checks exact
+// lengths, operand legality, metadata classifications and byte round trips.
+struct CodecAdapter {
+  std::string identity;
+  size_t max_instruction_bytes=4096;
+  bool cacheable=true;
+  std::function<Result<DecodedOperands>(std::span<const uint8_t>,uint64_t)> decode_one;
+  std::function<Result<std::vector<uint8_t>>(uint32_t,const std::map<std::string,std::string>&,uint64_t)> encode_form;
+};
+// Explicit fixed8, masked and owning native codecs share this contract.
 struct Architecture {
   std::string name; std::unordered_map<uint8_t,std::string> opcodes;
   std::unordered_map<uint8_t,std::string> semantics;
@@ -42,6 +52,7 @@ struct Architecture {
   std::map<std::string,std::map<uint64_t,std::string>> registers;
   // Operand-free byte opcodes may still return, trap, or branch indirectly.
   std::unordered_map<uint8_t,ControlFlow> control;
+  std::shared_ptr<const CodecAdapter> codec;
 };
 struct TranslationRule { std::string source, target; std::vector<uint8_t> bytes; };
 struct CacheStorage;
@@ -60,12 +71,29 @@ struct SemanticTransform {
   std::function<Result<std::string>(const LiftedInstruction&)> apply;
   bool cacheable=true;
 };
+struct SemanticRegion {
+  std::vector<LiftedInstruction> instructions;
+  // Source/synthetic label -> output instruction index, including one-past-end.
+  std::map<uint64_t,size_t> boundaries;
+};
+struct RegionTransform {
+  std::string identity;
+  std::function<Result<SemanticRegion>(const SemanticRegion&)> apply;
+  bool cacheable=true;
+  // Optional, explicit proof context for a state/ABI-changing transformation.
+  // All four fields must match the actual source and destination contracts.
+  std::string source_state_model, target_state_model, source_domain, target_domain;
+};
 struct TranslationOptions {
   std::string rule_version, optimization_configuration, translator_configuration, plugin_versions, runtime_configuration;
   uint64_t source_address=0, target_address=0;
   std::optional<SemanticTransform> semantic_transform;
+  std::optional<RegionTransform> region_transform;
 };
 Result<Architecture> from_metacode(const metacode::Architecture&);
+// Native codec identity must match tooling.bin2bin.codec_adapter. The callbacks
+// and their captured owners are copied; the source metadata may be destroyed.
+Result<Architecture> from_metacode(const metacode::Architecture&,const CodecAdapter&);
 Result<int> validate(const Architecture&);
 // Operand strings are semantic register names or decimal integers. No raw handles.
 Result<std::vector<uint8_t>> encode(const Architecture&,std::string_view mnemonic,const std::map<std::string,std::string>& operands={},uint64_t address=0);

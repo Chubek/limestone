@@ -30,6 +30,8 @@ typedef struct limestone_selection limestone_selection;
 limestone_unisel_document *limestone_unisel_load(const char *source,const char *source_name,limestone_error *);
 limestone_unisel_document *limestone_unisel_load_file(const char *path,limestone_error *);
 void limestone_unisel_document_destroy(limestone_unisel_document *);
+limestone_status limestone_unisel_set_selection_predicate(limestone_unisel_document *,const char *name,
+  const limestone_selection_predicate *,limestone_error *);
 /** Prepare effects and construct the vendor-independent selection model.
  * Uncovered operations remain inspectable as empty coverage clauses. The model
  * owns source/pattern snapshots independently of its document. */
@@ -80,6 +82,8 @@ limestone_burs_document *limestone_burs_load(const char *source,const char *sour
  * source graph is bounded to 16 MiB, 128 documents and 32 include levels. */
 limestone_burs_document *limestone_burs_load_file(const char *path,limestone_error *);
 void limestone_burs_document_destroy(limestone_burs_document *);
+limestone_status limestone_burs_set_selection_predicate(limestone_burs_document *,const char *name,
+  const limestone_selection_predicate *,limestone_error *);
 size_t limestone_burs_tree_count(const limestone_burs_document *);
 const char *limestone_burs_tree_name(const limestone_burs_document *,size_t tree);
 const char *limestone_burs_document_text(const limestone_burs_document *);
@@ -131,6 +135,9 @@ void limestone_schedule_destroy(limestone_schedule *);
 size_t limestone_schedule_count(const limestone_schedule *);
 typedef struct limestone_issue { uint32_t instruction,cycle;int has_slot;uint32_t slot; } limestone_issue;
 limestone_status limestone_schedule_issue(const limestone_schedule *,size_t index,limestone_issue *,limestone_error *);
+/** All consumed issue slots, including the primary slot. */
+size_t limestone_schedule_slot_count(const limestone_schedule *,size_t index);
+limestone_status limestone_schedule_slot(const limestone_schedule *,size_t index,size_t slot,uint32_t *value,limestone_error *);
 size_t limestone_schedule_resource_count(const limestone_schedule *,size_t index);
 const char *limestone_schedule_resource(const limestone_schedule *,size_t index,size_t reservation);
 /** Borrow a diagnostic listing of the region, dependencies and issue assignments. */
@@ -166,6 +173,11 @@ const char *limestone_allocation_document_text(const limestone_allocation_docume
  */
 limestone_assignment *limestone_assignment_run(const limestone_allocation_document *,size_t unit,size_t function,
   limestone_allocator,limestone_error *);
+/** Use document PBQP policy when options is NULL; otherwise copy/use the supplied
+ * policy for this run. Returned assignment owns its result independently. */
+limestone_assignment *limestone_assignment_run_pbqp(const limestone_allocation_document *,size_t unit,size_t function,
+  const limestone_pbqp_options *,limestone_error *);
+limestone_status limestone_assignment_cost(const limestone_assignment *,double *cost,limestone_error *);
 void limestone_assignment_destroy(limestone_assignment *);
 size_t limestone_assignment_count(const limestone_assignment *);
 limestone_status limestone_assignment_at(const limestone_assignment *,size_t index,uint32_t *value,uint32_t *physical,limestone_error *);

@@ -1,4 +1,5 @@
 #include "umd.hpp"
+#include "schedrow/memory_metadata.hpp"
 #include "parsers/unisel_ast.hpp"
 #include "parsers/source_internal.hpp"
 #include "parsers/semantic.hpp"
@@ -102,7 +103,8 @@ Pattern pattern(const ast::Pattern& input,uint32_t id) {
     if constexpr(std::is_same_v<T,ast::Cost>){key="cost";auto n=integer(p->amount->value);if(n<0||n>std::numeric_limits<int>::max())fail(*p,"invalid selection cost");result.cost=static_cast<int>(n);}
     else if constexpr(std::is_same_v<T,ast::SideEffects>){key="side_effects";result.supports_side_effects=p->enabled->value=="true";}
     else if constexpr(std::is_same_v<T,ast::Origin>){key="origin";result.origin=unquote(p->name->value);}
-    else {key="where";auto constraints=metacode::load_operand_constraints(attributes(p->constraints->attributes));if(!constraints)fail(*p,constraints.error().message,constraints.error().code);result.constraints=std::move(constraints.value());}
+    else if constexpr(std::is_same_v<T,ast::MemoryContract>){key="memory_contract";auto memory=schedrow::metadata::load_memory_access(V(attributes(p->access->attributes)));if(!memory)fail(*p,memory.error().message,memory.error().code);result.fused_memory=std::move(memory.value());}
+    else {key="where";auto fields=attributes(p->constraints->attributes);auto constraints=metacode::load_operand_constraints(fields);if(!constraints)fail(*p,constraints.error().message,constraints.error().code);result.constraints=std::move(constraints.value());auto host=metacode::load_host_constraints(fields);if(!host)fail(*p,host.error().message,host.error().code);result.host_constraints=std::move(host.value());}
     if(!options.insert(key).second)fail(*p,"duplicate pattern option: "+key,Error::Code::Conflict);
   },option->value);
   return result;
@@ -125,19 +127,20 @@ Program program(const ast::Program& input) {
         if(block!=UINT32_MAX)fail(*ptr,"nested CFG blocks are unsupported",Error::Code::Unsupported);items(ptr->items,blocks.at(name(*ptr->name)));
       }else if constexpr(std::is_same_v<T,ast::NodeDeclaration>) {
         Node n{ids.at(ptr->result->value),ptr->opcode->value,{}, {},ptr->type?ptr->type->name->value:"",block==UINT32_MAX?0:block};n.origin=ptr->source.file+":"+std::to_string(ptr->source.begin.line)+":"+std::to_string(ptr->source.begin.column);
-        for(auto& arg:ptr->inputs)std::visit([&](auto& operand) {
+        uint64_t argument_index=0;for(auto& arg:ptr->inputs){if(argument_index>UINT32_MAX)fail(*ptr,"graph argument index overflow",Error::Code::ResourceLimit);std::visit([&](auto& operand) {
           using A=std::remove_cvref_t<decltype(*operand)>;
           if constexpr(std::is_same_v<A,ast::Ref>)n.inputs.push_back(ids.at(operand->value));
           else if constexpr(std::is_same_v<A,ast::Integer>){if(n.op!="const"||n.constant)fail(*operand,"integer arguments require a const node");n.constant=integer(operand->value);}
-          else fail(*operand,"string arguments require an IL adapter",Error::Code::Unsupported);
-        },arg->value);
+          else n.metadata.strings.push_back({uint32_t(argument_index),unquote(operand->value)});
+        },arg->value);++argument_index;}
         for(auto& option:ptr->options)std::visit([&](auto& p){using O=std::remove_cvref_t<decltype(*p)>;
           if constexpr(std::is_same_v<O,ast::NodeProperties>) {
             auto fields=attributes(p->properties->attributes);n.register_class=text(fields,"class");if(fields.contains("origin"))n.origin=text(fields,"origin");n.call=boolean(fields,"call");n.terminator=boolean(fields,"terminator");n.may_trap=boolean(fields,"may_trap");
             std::map<std::string,schedrow::ControlFlow> flow{{"",schedrow::ControlFlow::None},{"none",schedrow::ControlFlow::None},{"branch",schedrow::ControlFlow::Branch},{"conditional_branch",schedrow::ControlFlow::ConditionalBranch},{"return",schedrow::ControlFlow::Return},{"indirect_branch",schedrow::ControlFlow::IndirectBranch},{"trap",schedrow::ControlFlow::Trap},{"call",schedrow::ControlFlow::Call}};auto control=text(fields,"control_flow");if(!flow.contains(control))fail(*p,"unknown graph control flow");n.control=flow.at(control);
             if(auto it=fields.find("targets");it!=fields.end()){auto array=std::get_if<V::Array>(&it->second.data);if(!array)fail(*p,"targets must be an array");for(auto& target:*array)n.block_targets.push_back(block_ref(target));}
-            if(auto it=fields.find("access");it!=fields.end()){auto a=std::get_if<Object>(&it->second.data);if(!a)fail(*p,"access must be an object");schedrow::MemoryAccess memory{boolean(*a,"read"),boolean(*a,"write"),boolean(*a,"volatile"),boolean(*a,"atomic")};memory.address_space=text(*a,"address_space");memory.alias_sets=numeric_array(*a,"alias_sets");if(a->contains("size"))memory.size=number(text(*a,"size"));if(a->contains("alignment"))memory.alignment=number(text(*a,"alignment"));std::map<std::string,schedrow::MemoryOrdering> orderings{{"",schedrow::MemoryOrdering::Relaxed},{"relaxed",schedrow::MemoryOrdering::Relaxed},{"acquire",schedrow::MemoryOrdering::Acquire},{"release",schedrow::MemoryOrdering::Release},{"acq_rel",schedrow::MemoryOrdering::AcquireRelease},{"seq_cst",schedrow::MemoryOrdering::Sequential}};auto ordering=text(*a,"ordering");if(!orderings.contains(ordering))fail(*p,"unknown memory ordering");memory.ordering=orderings.at(ordering);n.access=std::move(memory);for(auto& [key,v]:*a)if(key!="read"&&key!="write"&&key!="volatile"&&key!="atomic"&&key!="address_space"&&key!="alias_sets"&&key!="size"&&key!="alignment"&&key!="ordering")fail(*p,"unknown graph memory property: "+key);}
-            for(auto& [key,v]:fields)if(key!="class"&&key!="origin"&&key!="call"&&key!="terminator"&&key!="may_trap"&&key!="control_flow"&&key!="targets"&&key!="access")fail(*p,"unknown graph node property: "+key);
+             if(auto it=fields.find("access");it!=fields.end()){auto a=std::get_if<Object>(&it->second.data);if(!a)fail(*p,"access must be an object");schedrow::MemoryAccess memory{boolean(*a,"read"),boolean(*a,"write"),boolean(*a,"volatile"),boolean(*a,"atomic")};memory.address_space=text(*a,"address_space");memory.alias_sets=numeric_array(*a,"alias_sets");if(a->contains("size"))memory.size=number(text(*a,"size"));if(a->contains("alignment"))memory.alignment=number(text(*a,"alignment"));std::map<std::string,schedrow::MemoryOrdering> orderings{{"",schedrow::MemoryOrdering::Relaxed},{"relaxed",schedrow::MemoryOrdering::Relaxed},{"acquire",schedrow::MemoryOrdering::Acquire},{"release",schedrow::MemoryOrdering::Release},{"acq_rel",schedrow::MemoryOrdering::AcquireRelease},{"seq_cst",schedrow::MemoryOrdering::Sequential}};auto ordering=text(*a,"ordering");if(!orderings.contains(ordering))fail(*p,"unknown memory ordering");memory.ordering=orderings.at(ordering);n.access=std::move(memory);for(auto& [key,v]:*a)if(key!="read"&&key!="write"&&key!="volatile"&&key!="atomic"&&key!="address_space"&&key!="alias_sets"&&key!="size"&&key!="alignment"&&key!="ordering")fail(*p,"unknown graph memory property: "+key);}
+             if(auto it=fields.find("metadata");it!=fields.end()){auto properties=std::get_if<Object>(&it->second.data);if(!properties)fail(*p,"graph metadata must be an object");n.metadata.properties=*properties;}
+             for(auto& [key,v]:fields)if(key!="class"&&key!="origin"&&key!="call"&&key!="terminator"&&key!="may_trap"&&key!="control_flow"&&key!="targets"&&key!="access"&&key!="metadata")fail(*p,"unknown graph node property: "+key);
           }else{bool enabled=p->enabled->value=="true";if constexpr(std::is_same_v<O,ast::Required>)n.required=enabled;else if constexpr(std::is_same_v<O,ast::ProducesValue>)n.produces_value=enabled;else n.side_effect=enabled;}
         },option->value);
         result.nodes.push_back(std::move(n));
@@ -258,7 +261,8 @@ Result<MachineDescription> from_metacode(const metacode::Architecture& architect
       const auto& ast_machine=*std::get<std::unique_ptr<ast::Machine>>(syntax.value()->declarations.front()->value);
       const auto& ast_pattern=*std::get<std::unique_ptr<ast::Pattern>>(ast_machine.items.back()->value);
       auto p=pattern(ast_pattern,static_cast<uint32_t>(machine.patterns.size()));p.supports_side_effects=text(*contract,"side_effects")=="true";p.origin=op.source.file+":"+std::to_string(op.source.line)+":"+std::to_string(op.source.column);
-      if(auto where=contract->find("where");where!=contract->end()){auto fields=std::get_if<Object>(&where->second.data);if(!fields)throw Error{Error::Code::InvalidArgument,"instruction-selection where must be an object"};auto constraints=metacode::load_operand_constraints(*fields);if(!constraints)throw constraints.error();p.constraints=std::move(constraints.value());}
+      if(auto where=contract->find("where");where!=contract->end()){auto fields=std::get_if<Object>(&where->second.data);if(!fields)throw Error{Error::Code::InvalidArgument,"instruction-selection where must be an object"};auto constraints=metacode::load_operand_constraints(*fields);if(!constraints)throw constraints.error();p.constraints=std::move(constraints.value());auto host=metacode::load_host_constraints(*fields);if(!host)throw host.error();p.host_constraints=std::move(host.value());}
+      if(auto memory=contract->find("memory_contract");memory!=contract->end()){auto access=schedrow::metadata::load_memory_access(memory->second);if(!access)throw access.error();p.fused_memory=std::move(access.value());}
       std::function<void(const PatternTree&)> collect=[&](auto& t){if(t.op.empty())return;auto [it,added]=machine.operators.emplace(t.op,t.inputs.size());if(!added&&it->second!=t.inputs.size())throw Error{Error::Code::Conflict,"conflicting source operator arity"};for(auto& child:t.inputs)collect(child);};collect(*p.tree);machine.patterns.push_back(std::move(p));
     }catch(const Error& error){return Result<MachineDescription>::err(error);}
   }
@@ -277,7 +281,7 @@ std::string print_umd(const MachineDescription& machine) {
     std::function<void(const PatternTree&)> collect=[&](auto& tree){if(!tree.binding.empty())bindings.insert(tree.binding);for(auto& child:tree.inputs)collect(child);};collect(t);
     size_t next=0;std::function<void(PatternTree&)> bind=[&](auto& tree){if(tree.op.empty()&&tree.binding.empty()){std::string candidate;do{candidate="arg"+std::to_string(next++);}while(bindings.contains(candidate));tree.binding=candidate;bindings.insert(candidate);}for(auto& child:tree.inputs)bind(child);};bind(t);
     out+="  pattern "+std::to_string(p.id)+" "+quote(p.name)+": "+render(t)+" -> "+quote(p.instruction)+" cost "+std::to_string(p.cost)+" side_effects "+(p.supports_side_effects?"true":"false")+" origin "+quote(p.origin);
-    if(!p.constraints.empty())out+=" where "+render_object(metacode::operand_constraints_metadata(p.constraints));out+=";\n";
+    if(!p.constraints.empty()||!p.host_constraints.empty())out+=" where "+render_object(metacode::selection_constraints_metadata(p.constraints,p.host_constraints));if(p.fused_memory)out+=" memory_contract "+render_object(std::get<Object>(schedrow::metadata::value(*p.fused_memory).data));out+=";\n";
   }
   std::map<std::string,V> metadata(machine.metadata.begin(),machine.metadata.end());for(auto& [key,v]:metadata)out+="  "+quote(key)+"="+render_value(v)+";\n";
   return out+"}\n";

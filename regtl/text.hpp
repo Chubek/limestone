@@ -18,6 +18,7 @@ struct AllocationUnit {
   std::map<std::string,uint32_t> physical_names,virtual_names;
   std::map<VReg,metacode::Value::Object> value_metadata;
   metacode::Value::Object metadata;
+  PbqpOptions pbqp;
 };
 Result<std::vector<AllocationUnit>> load_regtl(std::string_view,std::string_view file="<regtl>");
 Result<std::string> print_regtl(std::span<const AllocationUnit>);

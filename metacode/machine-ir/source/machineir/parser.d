@@ -3,6 +3,8 @@ module machineir.parser;
 import std.conv : to;
 import std.string : strip, toLower;
 import std.array : appender;
+import std.json : JSONValue, JSONOptions, parseJSON, toJSON;
+import std.utf : validate;
 import machineir.semantics : SExpr, parseSExpr;
 
 enum ValueKind { scalar, stringLiteral, number, boolean, array, object, bareList }
@@ -32,8 +34,8 @@ struct Value {
 
     string toString() const {
         if(kind==ValueKind.stringLiteral) {
-            import std.string : replace;
-            return `"` ~ text.replace(`\`,`\\`).replace(`"`,`\"`).replace("\n",`\n`).replace("\r",`\r`).replace("\t",`\t`) ~ `"`;
+            auto value=JSONValue(text);
+            return toJSON(value);
         }
         if(kind==ValueKind.object) {
             string s="{"; foreach(f;fields)s~=f.name~"="~f.value.toString()~";"; return s~"}";
@@ -123,17 +125,18 @@ private class Lexer {
         if (c == ',') return Tok(Tok.Kind.comma, ",", at);
         if (c == ':') return Tok(Tok.Kind.colon, ":", at);
         if (c == '"') {
-            auto b = appender!string();
             while (p < s.length) {
                 c = s[p++];
-                if (c == '"') return Tok(Tok.Kind.stringLiteral, b.data, at);
-                if (c == '\\' && p < s.length) {
-                    char e = s[p++];
-                    switch (e) {
-                    case 'n': b.put('\n'); break; case 'r': b.put('\r'); break;
-                    case 't': b.put('\t'); break; default: b.put(e); break;
+                if (c == '"') {
+                    auto token=s[at..p];
+                    try {
+                        validate(token);
+                        return Tok(Tok.Kind.stringLiteral,parseJSON(token,JSONOptions.strictParsing).str,at);
+                    } catch(Exception error) {
+                        throw new ParseError("invalid string: "~error.msg,at);
                     }
-                } else b.put(c);
+                }
+                if (c == '\\' && p < s.length) ++p;
             }
             throw new ParseError("unterminated string", at);
         }

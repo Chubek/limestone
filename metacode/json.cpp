@@ -4,10 +4,29 @@
 
 namespace limestone::metacode {
 namespace {
+size_t utf8_length(std::string_view text,size_t offset) {
+  auto first=static_cast<unsigned char>(text[offset]);
+  if(first<0x80)return 1;
+  size_t count=first>=0xc2&&first<=0xdf?2:first>=0xe0&&first<=0xef?3:first>=0xf0&&first<=0xf4?4:0;
+  if(!count||count>text.size()-offset)return 0;
+  auto second=static_cast<unsigned char>(text[offset+1]);
+  if((first==0xe0&&second<0xa0)||(first==0xed&&second>=0xa0)||(first==0xf0&&second<0x90)||(first==0xf4&&second>=0x90))return 0;
+  for(size_t index=1;index<count;++index) {
+    auto byte=static_cast<unsigned char>(text[offset+index]);
+    if(byte<0x80||byte>0xbf)return 0;
+  }
+  return count;
+}
 class Reader {
   std::string_view source,file;size_t position=0;
+  std::vector<size_t> lines{0};
+  SourceLocation location(size_t offset) const {
+    auto line=static_cast<size_t>(std::upper_bound(lines.begin(),lines.end(),offset)-lines.begin()-1);
+    return {std::string(file),offset,static_cast<uint32_t>(line+1),static_cast<uint32_t>(offset-lines[line]+1)};
+  }
   [[noreturn]] void fail(std::string message,Error::Code code=Error::Code::Parse)const {
-    throw Error{code,std::string(file)+":"+std::to_string(position)+": "+message};
+    auto at=location(position);
+    throw Error{code,at.file+":"+std::to_string(at.line)+":"+std::to_string(at.column)+": "+message};
   }
   void space(){while(position<source.size()&&(source[position]==' '||source[position]=='\t'||source[position]=='\n'||source[position]=='\r'))++position;}
   bool take(char c){space();if(position<source.size()&&source[position]==c){++position;return true;}return false;}
@@ -27,7 +46,11 @@ class Reader {
     require('"');std::string out;
     while(position<source.size()) {
       auto c=static_cast<unsigned char>(source[position++]);if(c=='"')return out;if(c<32)fail("unescaped string control character");
-      if(c!='\\'){out+=char(c);continue;}
+      if(c!='\\') {
+        auto count=utf8_length(source,position-1);
+        if(!count){--position;fail("invalid UTF-8 string");}
+        out.append(source.substr(position-1,count));position+=count-1;continue;
+      }
       if(position==source.size())fail("truncated string escape");
       switch(source[position++]) {
         case '"':out+='"';break;case '\\':out+='\\';break;case '/':out+='/';break;
@@ -61,21 +84,30 @@ class Reader {
       if(negative){int64_t number;auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),number);if(error!=std::errc{}||end!=text.data()+text.size())fail("integer outside signed 64-bit range");out=Value(number);}
       else {uint64_t number;auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),number);if(error!=std::errc{}||end!=text.data()+text.size())fail("integer outside unsigned 64-bit range");out=Value(number);}
     }
-    out.source={std::string(file),begin,1,1};return out;
+    out.source=location(begin);return out;
   }
  public:
-  Reader(std::string_view s,std::string_view f):source(s),file(f){}
+  Reader(std::string_view s,std::string_view f):source(s),file(f){for(size_t offset=0;offset<source.size();++offset)if(source[offset]=='\n')lines.push_back(offset+1);}
   Value read(){auto out=value(0);space();if(position!=source.size())fail("trailing JSON input");return out;}
 };
 std::string quote(std::string_view s) {
   constexpr char hex[]="0123456789abcdef";std::string out="\"";
-  for(unsigned char c:s){if(c=='"'||c=='\\'){out+='\\';out+=char(c);}else if(c<32){out+="\\u00";out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);}return out+'"';
+  for(size_t offset=0;offset<s.size();) {
+    auto count=utf8_length(s,offset);
+    if(!count)throw Error{Error::Code::InvalidArgument,"invalid UTF-8 string at byte "+std::to_string(offset)};
+    auto byte=static_cast<unsigned char>(s[offset]);
+    if(byte=='"'||byte=='\\'){out+='\\';out+=char(byte);}
+    else if(byte<32){out+="\\u00";out+=hex[byte>>4];out+=hex[byte&15];}
+    else out.append(s.substr(offset,count));
+    offset+=count;
+  }
+  return out+'"';
 }
 std::string print(const Value& v,unsigned depth) {
   if(depth>256)throw Error{Error::Code::ResourceLimit,"JSON nesting limit"};
   if(auto s=std::get_if<std::string>(&v.data))return quote(*s);
   if(auto a=std::get_if<Value::Array>(&v.data)){std::string out="[";for(size_t k=0;k<a->size();++k){if(k)out+=',';out+=print((*a)[k],depth+1);}return out+']';}
-  if(auto o=std::get_if<Value::Object>(&v.data)){std::map<std::string,Value> sorted(o->begin(),o->end());std::string out="{";bool first=true;for(auto& [key,value]:sorted){if(!first)out+=',';first=false;out+=quote(key)+':'+print(value,depth+1);}return out+'}';}
+  if(auto o=std::get_if<Value::Object>(&v.data)){std::map<std::string_view,const Value*> sorted;for(auto& [key,value]:*o)sorted.emplace(key,&value);std::string out="{";bool first=true;for(auto& [key,value]:sorted){if(!first)out+=',';first=false;out+=quote(key)+':'+print(*value,depth+1);}return out+'}';}
   return v.text();
 }
 }

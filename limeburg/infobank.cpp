@@ -1,4 +1,5 @@
 #include "infobank.hpp"
+#include "schedrow/memory_metadata.hpp"
 #include "target.hpp"
 #include <SExprTk.hpp>
 #include <charconv>
@@ -193,7 +194,9 @@ unisel::Pattern inventory_pattern(const metacode::Architecture& architecture,con
     if(auto where=object(*selection,"where")) {
       auto constraints=metacode::load_operand_constraints(*where);if(!constraints)throw constraints.error();
       pattern.constraints.insert(pattern.constraints.end(),constraints.value().begin(),constraints.value().end());
+      auto host=metacode::load_host_constraints(*where);if(!host)throw host.error();pattern.host_constraints=std::move(host.value());
     }
+    if(auto memory=selection->find("memory_contract");memory!=selection->end()){auto access=schedrow::metadata::load_memory_access(memory->second);if(!access)throw access.error();pattern.fused_memory=std::move(access.value());}
   }
   return pattern;
 }

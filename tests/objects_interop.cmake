@@ -6,7 +6,7 @@ if(NOT result EQUAL 0)
   message(FATAL_ERROR "Native object preparation failed: ${output}${error}")
 endif()
 file(WRITE "${work}/consumer.c" "extern int limestone_object_native(void); int main(void) {return limestone_object_native()==42?0:1;}")
-execute_process(COMMAND "${CC}" "${work}/consumer.c" "${work}/native-reemitted.o" "${HELPER}" -o "${work}/consumer"
+execute_process(COMMAND "${CC}" "${work}/consumer.c" "${work}/native-reemitted.o" "${work}/native-reemitted.a" -o "${work}/consumer"
   RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "Native linker rejected reemitted ELF: ${output}${error}")

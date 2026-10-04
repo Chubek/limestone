@@ -104,8 +104,11 @@ The host extension must stay loaded while any callback snapshot is retained.
 `ObjectTarget(isa_source)` owns ELF identity and relocation contracts. `create()`
 returns a mutable builder; `from_code(data, symbol)` and `from_module(module,
 symbol)` package raw/encoded bytes. `ObjectFile(data, source_name=None)` loads an
-owning ELF64 snapshot. Builders provide `add_section`, `add_symbol` and
-`add_relocation`; `emit()`, `sections`, and `symbols` return owning Python copies.
+owning ELF32/ELF64 snapshot. Builders provide `add_section`, `add_symbol` and
+`add_relocation`; `emit()`, `sections`, `symbols`, and `relocations` return owning
+Python copies. `elf_class` reports 32 or 64. Use
+`add_relocation(..., implicit_addend=True)` for REL records whose addends are
+already encoded in section bytes; otherwise the builder creates RELA records.
 `target.link(objects, base_address=0, max_size=64*1024*1024, externals={})`
 returns an independent `LinkedImage` with copied `bytes`, `symbols`, and
 `base_address`. Input handles may close after linking. Installation/execution

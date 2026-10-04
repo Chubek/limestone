@@ -1,7 +1,9 @@
 module machineir.semantics;
 
 import std.array : appender;
-import std.string : strip, replace;
+import std.string : strip;
+import std.json : JSONValue, JSONOptions, parseJSON, toJSON;
+import std.utf : validate;
 
 enum SExprKind { atom, stringLiteral, number, list }
 
@@ -28,7 +30,7 @@ struct SExpr {
         case SExprKind.atom: buffer.put(text); break;
         case SExprKind.number: buffer.put(text); break;
         case SExprKind.stringLiteral:
-            buffer.put(`"`); buffer.put(text.replace(`\`, `\\`).replace(`"`, `\"`)); buffer.put(`"`); break;
+            auto value=JSONValue(text);buffer.put(toJSON(value));break;
         case SExprKind.list:
             buffer.put("(");
             foreach (i, x; children) { if (i) buffer.put(" "); x.write(buffer); }
@@ -58,12 +60,19 @@ private class SLexer {
         if (c == '(') return STok(STok.Kind.lparen, "(");
         if (c == ')') return STok(STok.Kind.rparen, ")");
         if (c == '"') {
-            auto b = appender!string();
+            auto start=p-1;
             while (p < s.length) {
                 c = s[p++];
-                if (c == '"') return STok(STok.Kind.stringLiteral, b.data);
-                if (c == '\\' && p < s.length) b.put(s[p++]);
-                else b.put(c);
+                if (c == '"') {
+                    auto token=s[start..p];
+                    try {
+                        validate(token);
+                        return STok(STok.Kind.stringLiteral,parseJSON(token,JSONOptions.strictParsing).str);
+                    } catch(Exception error) {
+                        throw new SemanticError("invalid semantic string: "~error.msg);
+                    }
+                }
+                if (c == '\\' && p < s.length) ++p;
             }
             throw new SemanticError("unterminated semantic string");
         }

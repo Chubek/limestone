@@ -8,3 +8,8 @@ foreach(pair IN ITEMS "--select-burs|selection.limeburg|ADDI" "--select-burs|sel
     message(FATAL_ERROR "Text IL CLI failed for ${mode}: ${error}\n${output}")
   endif()
 endforeach()
+execute_process(COMMAND "${CLI}" --allocate-il --allocator pbqp "${FIXTURES}/allocation-costs.regtl"
+  RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT status EQUAL 0 OR NOT output MATCHES "v1 -> physical 0" OR NOT output MATCHES "v2 -> spill")
+  message(FATAL_ERROR "PBQP CLI failed: ${error}\n${output}")
+endif()

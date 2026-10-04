@@ -10,7 +10,8 @@ node RegisterAlias { Physical first @0; Physical second @1; }
 node Operator { Ident name; Unsigned arity; }
 node Instruction { Name name; Attribute* attributes; }
 node Pattern { Unsigned? number; Name name @0; TreePattern tree; Name instruction @1; PatternOption* options; }
-sum PatternOption = Cost | SideEffects | Where | Origin;
+sum PatternOption = Cost | SideEffects | Where | Origin | MemoryContract;
+node MemoryContract { Object access; }
 node Cost { Integer amount; }
 node SideEffects { Boolean enabled; }
 node Where { Object constraints; }

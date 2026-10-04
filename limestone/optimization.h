@@ -79,6 +79,12 @@ const char *limestone_optimization_expression(const limestone_optimization *);
 limestone_status limestone_optimization_get_info(const limestone_optimization *,limestone_optimization_info *,limestone_error *);
 size_t limestone_optimization_trace_count(const limestone_optimization *);
 const char *limestone_optimization_trace(const limestone_optimization *,size_t index);
+/* Borrow the deterministic e-node insertion/equality derivation. Empty when
+ * tracing was disabled; retained independently of the source optimizer. */
+const char *limestone_optimization_derivation(const limestone_optimization *);
+/** True when an interrupted vendor operation discarded its partial graph and
+ * returned the original checked term. Rewrite counts retain committed unions. */
+int limestone_optimization_used_fallback(const limestone_optimization *);
 
 /** Bin2Bin control classifications differ from scheduling IL classifications. */
 typedef enum limestone_binary_control_flow

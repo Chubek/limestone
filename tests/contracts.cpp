@@ -99,7 +99,7 @@ int main(int argc,char** argv){return test_main([&]{
   include_options.resolver=[](auto,auto){return Result<syntax::ResolvedSource>::ok({"","machine x {}"});};fails(unisel::load_umd(virtual_root,"/virtual/root.umd",include_options),Error::Code::InvalidArgument);
   include_options.resolver=[](auto,auto){return Result<syntax::ResolvedSource>::ok({std::string("file\0alias",10),"machine x {}"});};fails(unisel::load_umd(virtual_root,"/virtual/root.umd",include_options),Error::Code::InvalidArgument);
   fails(unisel::load_umd("machine x {}",std::string_view("bad\0identity",12)),Error::Code::InvalidArgument);
-  for(auto selector:{SelectionStrategy::Global,SelectionStrategy::Greedy,SelectionStrategy::BURS})for(auto allocator:{AllocationStrategy::LinearScan,AllocationStrategy::Greedy,AllocationStrategy::GraphColoring,AllocationStrategy::Constraint}) {
+  for(auto selector:{SelectionStrategy::Global,SelectionStrategy::Greedy,SelectionStrategy::BURS})for(auto allocator:{AllocationStrategy::LinearScan,AllocationStrategy::Greedy,AllocationStrategy::GraphColoring,AllocationStrategy::Constraint,AllocationStrategy::PBQP}) {
     PipelineOptions options;options.selector=selector;options.allocator=allocator;options.allocate=true;
     auto module=take(run_pipeline(*document.program,target,options));CHECK(module.allocation&&module.selected.instructions.size()>=2);
     take(regtl::verify(module.allocation_problem,*module.allocation));take(schedrow::verify(module.selected,target.scheduling,module.scheduled));

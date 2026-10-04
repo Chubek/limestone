@@ -50,6 +50,43 @@ try:
 except l.LimestoneError as error:
     assert error.code == l.LIMESTONE_PARSE and str(error)
 
+with l.TraceRuntime("(lambda x (lambda y (add x (if y 2 0))))") as runtime:
+    with runtime.invoke([40]) as result:
+        closure = result.value
+assert closure.callable
+try:
+    closure.integer
+    raise AssertionError("inspected a closure as an integer")
+except l.LimestoneError as error:
+    assert error.code == l.LIMESTONE_UNSUPPORTED
+with closure:
+    with closure.apply((1,), l.trace_options(record_guards=True)) as result:
+        with result.value as value:
+            assert value.integer == 42
+        assert "taken" in result.trace
+        guards = result.guards
+with guards[0] as guard:
+    assert guard.expected
+    with guard.resume(0) as result:
+        with result.value as value:
+            assert value.integer == 40
+    try:
+        guard.resume(1, l.trace_options(step_limit=0))
+        raise AssertionError("ignored the continuation budget")
+    except l.LimestoneError as error:
+        assert error.code == l.LIMESTONE_RESOURCE_LIMIT
+with l.TraceRuntime("((lambda ignored 42) (add 9223372036854775807 1))") as runtime:
+    with runtime.invoke(options=l.trace_options(record_trace=False)) as result:
+        assert result.trace == "" and result.guards == []
+        with result.value as value:
+            assert value.integer == 42
+    for arguments in (None, [None], [None] * 65537):
+        try:
+            l.limestone_traceml_invoke(runtime._pointer(), arguments, None, l.limestone_error())
+            raise AssertionError("accepted invalid runtime arguments")
+        except (TypeError, ValueError):
+            pass
+
 with l.BURSDocument((fixtures / "selection.limeburg").read_text()) as document:
     selection = document.select()
 with selection:
@@ -127,20 +164,79 @@ with l.BURSDocument('ruleset x {nonterminal r;terminal C(0);rule r:C() binding i
     with document.analyze() as analysis:
         assert any("power_of_two failed" in attempt["reason"] for attempt in analysis.attempts)
 
+proof_source = ('machine m {operator const(0);instruction C {latency=0;}pattern p:const():i64 -> C '
+                'where {predicates=[{name=literal;parameters={label="symbol";};}];};}'
+                'program p {node %1=const("symbol",42):i64 properties {metadata={mode=exact;};};output %1;}')
+def literal_proof(context, parameters):
+    root = context["root"]
+    assert root["metadata"]["strings"] == [{"index": 0, "value": "symbol"}]
+    assert root["metadata"]["properties"] == {"mode": "exact"}
+    assert context["covered"][0]["id"] == root["id"]
+    return root["immediate"] == 42 and parameters["label"] == "symbol"
+
+with l.UniselDocument(proof_source) as document:
+    try:
+        document.analyze()
+        raise AssertionError("unbound proof accepted")
+    except l.LimestoneError as error:
+        assert error.code == l.LIMESTONE_UNSUPPORTED
+    with l.SelectionPredicate("literal", literal_proof) as predicate:
+        document.attach_predicate(predicate)
+    model = document.analyze()
+with model:
+    with model.select() as selected:
+        assert "proved literal" in selected.matches[0]["reason"] and "symbol" in selected.text
+with l.UniselDocument(proof_source) as document:
+    with l.SelectionPredicate("literal", lambda *_: False) as predicate:
+        document.attach_predicate(predicate)
+    with document.analyze() as model:
+        assert model.candidates == []
+with l.UniselDocument(proof_source) as document:
+    with l.SelectionPredicate("literal", lambda *_: 1) as predicate:
+        document.attach_predicate(predicate)
+    try:
+        document.analyze()
+        raise AssertionError("non-Boolean proof accepted")
+    except l.LimestoneError as error:
+        assert error.code == l.LIMESTONE_INVALID_ARGUMENT
+with l.UniselDocument(proof_source) as document:
+    def release_document(context, parameters):
+        document.close()
+        return literal_proof(context, parameters)
+    with l.SelectionPredicate("literal", release_document) as predicate:
+        document.attach_predicate(predicate)
+    with document.analyze() as model:
+        with model.select() as result:
+            assert result.cost == 1
+with l.BURSDocument('ruleset r {nonterminal r;terminal C(0);rule r:C() -> C where {predicates=[{name=literal;parameters={label="symbol";};}];};}'
+                    'tree t {node %1=C() immediate 42 properties {strings=[{index=0;value="symbol";}];metadata={mode=exact;};};root %1:r;}') as document:
+    with l.SelectionPredicate("literal", literal_proof) as predicate:
+        document.attach_predicate(predicate)
+    with document.select() as result:
+        assert result.cost == 1 and "symbol" in result.text
+
 with l.AllocationDocument((fixtures / "allocation.regtl").read_text()) as document:
     for algorithm in (l.LIMESTONE_ALLOCATE_LINEAR, l.LIMESTONE_ALLOCATE_GREEDY,
-                      l.LIMESTONE_ALLOCATE_COLOR, l.LIMESTONE_ALLOCATE_CONSTRAINT):
+                      l.LIMESTONE_ALLOCATE_COLOR, l.LIMESTONE_ALLOCATE_CONSTRAINT, l.LIMESTONE_ALLOCATE_PBQP):
         with document.allocate(algorithm=algorithm) as assignment:
             assert assignment.registers[8] == 2 and not assignment.spilled
     assignment = document.allocate()
 with assignment:
     assert assignment.registers and "physical" in assignment.text
+with l.AllocationDocument((fixtures / "allocation-costs.regtl").read_text()) as document:
+    assignment = document.allocate(function=None, algorithm=l.LIMESTONE_ALLOCATE_PBQP)
+with assignment:
+    assert assignment.registers == {1: 0} and assignment.spilled == [2] and assignment.cost == 2
+with l.SchedulingDocument("machine_model M {issue_width=3;}region R {instruction %1 {opcode=wide;latency=0;issue={width=2;slots=[0,2];};}}") as document:
+    with document.schedule() as schedule:
+        assert schedule.slot_assignments == [[0, 2]]
 
 with l.ObjectTarget((fixtures / "object-x86.isa").read_text()) as target:
     with target.create() as object:
         section = object.add_section(".data", b"\0"*8, flags=3, alignment=8)
         symbol = object.add_symbol("external")
         object.add_relocation(section, symbol, 1, 0, 2)
+        assert object.elf_class == 64 and object.relocations[0]["implicit_addend"] is False
         assert object.sections[0]["data"] == b"\0"*8 and object.symbols[0]["name"] == "external"
         encoded = object.emit()
     with l.ObjectFile(encoded, "python.o") as loaded:
@@ -233,6 +329,42 @@ with l.Optimizer("(operator add 2)(rule zero (add ?x 0) ?x)", "python.rules") as
     except l.LimestoneError as error:
         assert error.code == l.LIMESTONE_INVALID_ARGUMENT and "bad.rules" in str(error)
     assert optimizer.rule_count == 1
+with l.ObjectTarget((fixtures / "object-i386.isa").read_text()) as target:
+    with target.create() as object:
+        assert object.elf_class == 32
+        section = object.add_section(".data", b"\xfc\xff\xff\xff", flags=3, alignment=4)
+        symbol = object.add_symbol("external")
+        object.add_relocation(section, symbol, 1, 0, implicit_addend=True)
+        assert object.relocations == [dict(section=0, symbol=0, type=1, offset=0, addend=0, implicit_addend=True)]
+        try:
+            object.add_relocation(section, symbol, 1, 0, 1, implicit_addend=True)
+            raise AssertionError("accepted an explicit addend in a REL record")
+        except l.LimestoneError as error:
+            assert error.code == l.LIMESTONE_INVALID_ARGUMENT
+        assert len(object.relocations) == 1
+        encoded = object.emit()
+    with l.ObjectFile(encoded) as decoded:
+        assert decoded.elf_class == 32 and decoded.relocations[0]["implicit_addend"]
+        copied = decoded.relocations
+        with target.link([decoded], base_address=4096, externals={"external": 42}) as linked:
+            assert linked.bytes == b"\x26\0\0\0"
+        assert decoded.emit() == encoded
+    assert copied[0]["implicit_addend"]
+    with l.ObjectArchive() as archive:
+        with target.from_code(b"\x01\x02", "external") as member:
+            archive.add("member with spaces.o", member)
+            try:
+                archive.add("bad\nname", member)
+                raise AssertionError("accepted an invalid archive name")
+            except l.LimestoneError:
+                pass
+        assert archive.names == ["member with spaces.o"]
+        data = archive.emit()
+    with l.ObjectArchive(data) as archive, archive.member(0) as member, l.ObjectFile(encoded) as root:
+        assert member.symbols[0]["name"] == "external"
+        with target.link([root], base_address=4096, archives=[archive]) as linked:
+            assert linked.symbols["external"] >= 4096
+
 with optimized:
     assert optimized.expression == "42" and optimized.info["cost"] == 2
     assert optimized.info["rewrites"] > 0 and optimized.info["saturated"]

@@ -33,7 +33,17 @@ writes result bytes only on success. Pointer pointees stay borrowed. libffi owns
 aggregate ABI classification; InteropTk independently checks primitives and
 flat scalar records. Nested natural structs and embedded arrays are supported;
 top-level arrays, packed/over-aligned records, unions, bitfields, vectors,
-variadic aggregates, and foreign exceptions require separate ABI adapters.
+and foreign exceptions require separate ABI adapters.
+
+`exl_register_native_data_variadic` / `exl_library_bind_data_variadic` use the
+same owning descriptors and `exl_call_data` for a concrete variadic signature.
+The fixed-argument count is explicit. Ellipsis scalars must already be promoted:
+`float` and integers narrower than host `int` are rejected, not silently changed.
+Named arguments retain their declared types. Aggregate fields are not promoted;
+natural structs, nested records, and embedded arrays can occur on either side of
+the ellipsis and as results. libffi handles register/stack classification with
+`ffi_prep_cif_var`. stdcall/fastcall variadics are rejected. Failed registration
+does not reserve the name or change existing bindings.
 
 The supplied FFItk entry point returns `FFI_ENOSYS`; the isolated `native.c`
 adapter uses libffi when `LIMESTONE_ENABLE_NATIVE_FFI=ON`. Disabling it keeps

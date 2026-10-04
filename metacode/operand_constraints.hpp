@@ -1,6 +1,7 @@
 #pragma once
 #include "metacode.hpp"
 #include <bit>
+#include <map>
 
 namespace limestone::metacode {
 // Declarative source-operand legality, independent of selection cost, allocation
@@ -75,4 +76,25 @@ inline std::string_view predicate_name(OperandPredicate predicate) {
 // { constraints=[{kind=multiple_of;operand=imm;value=4;}, ...]; }
 Result<std::vector<OperandConstraint>> load_operand_constraints(const Value::Object&);
 Value::Object operand_constraints_metadata(std::span<const OperandConstraint>);
+struct StringArgument { uint32_t index=0;std::string value;bool operator==(const StringArgument&) const = default; };
+// Target-defined facts remain separate from the built-in semantic/effect model.
+// String indices refer to the original mixed argument list, before SSA filtering.
+struct OperandMetadata {
+  std::vector<StringArgument> strings;
+  Value::Object properties;
+  bool empty() const {return strings.empty()&&properties.empty();}
+};
+struct HostConstraint {
+  std::string name;
+  Value::Object parameters;
+  // Immutable owning proof callback. The context contains root, bindings and
+  // covered source facts; callbacks must be deterministic and side-effect-free.
+  std::function<Result<bool>(const Value::Object&,const Value::Object&)> prove;
+};
+Result<std::vector<HostConstraint>> load_host_constraints(const Value::Object&);
+Value::Object selection_constraints_metadata(std::span<const OperandConstraint>,std::span<const HostConstraint>);
+Result<int> validate_host_constraints(std::span<const HostConstraint>);
+Result<bool> prove_host_constraints(std::span<const HostConstraint>,const Value::Object&);
+Value operand_metadata(const OperandMetadata&);
+Result<OperandMetadata> load_operand_metadata(const Value&);
 }

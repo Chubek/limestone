@@ -1,4 +1,6 @@
 #include "unisel.hpp"
+#include "schedrow/operand_facts.hpp"
+#include "schedrow/memory_metadata.hpp"
 #include <SatieDPLL.hpp>
 #include <bit>
 #include <limits>
@@ -17,6 +19,9 @@ Result<int> validate(const Program& p,const std::vector<Pattern>& patterns) {
   for(auto& n:p.nodes)if(n.op.empty()||!nodes.emplace(n.id,&n).second)return Result<int>::err({Error::Code::InvalidArgument,"empty operation or duplicate source node"});
   std::map<NodeId,size_t> indegree;std::map<NodeId,std::vector<NodeId>> out;
   for(auto& n:p.nodes) {
+    auto metadata=metacode::load_operand_metadata(metacode::operand_metadata(n.metadata));if(!metadata)return Result<int>::err(metadata.error());
+    if(n.access){auto memory=schedrow::metadata::validate_memory_access(*n.access);if(!memory)return memory;}
+    std::set<uint32_t> string_indices;for(auto& argument:n.metadata.strings)if(argument.index>=n.inputs.size()+n.metadata.strings.size()+bool(n.constant)||!string_indices.insert(argument.index).second||argument.value.find('\0')!=std::string::npos)return Result<int>::err({Error::Code::InvalidArgument,"invalid mixed string argument at node "+std::to_string(n.id)});
     indegree[n.id]=n.inputs.size();
     for(auto id:n.inputs) {
        if(!nodes.contains(id))return Result<int>::err({Error::Code::InvalidArgument,"unknown input to node "+std::to_string(n.id)});
@@ -48,12 +53,16 @@ Result<int> validate(const Program& p,const std::vector<Pattern>& patterns) {
     std::vector<std::string> bindings;auto tree=pattern_tree(pat);std::vector<const PatternTree*> work{&tree};
     while(!work.empty()){auto node=work.back();work.pop_back();if(!node->binding.empty())bindings.push_back(node->binding);for(auto& child:node->inputs)work.push_back(&child);}
     auto legal=metacode::validate_operand_constraints(pat.constraints,bindings);if(!legal)return Result<int>::err({legal.error().code,(pat.origin.empty()?"":pat.origin+": ")+"pattern "+pat.name+": "+legal.error().message});
+    legal=metacode::validate_host_constraints(pat.host_constraints);if(!legal)return legal;
+    if(pat.fused_memory){if(!pat.supports_side_effects||pat.host_constraints.empty())return Result<int>::err({Error::Code::InvalidArgument,"memory fusion requires effect support and a named proof"});auto memory=schedrow::metadata::validate_memory_access(*pat.fused_memory);if(!memory)return memory;}
   }
   return Result<int>::ok(0);
 }
-std::vector<Candidate> match(const Program& input,const std::vector<Pattern>& patterns) {
-  auto prepared=prepare(input);if(!prepared)return {};const auto& p=prepared.value();
-  if(!validate(p,patterns))return {};
+Result<std::vector<Candidate>> match_checked(const Program& input,const std::vector<Pattern>& patterns) {
+  using Output=Result<std::vector<Candidate>>;
+  auto prepared=prepare(input);if(!prepared)return Output::err(prepared.error());const auto& p=prepared.value();
+  auto valid=validate(p,patterns);if(!valid)return Output::err(valid.error());
+  for(auto& pattern:patterns)for(auto& predicate:pattern.host_constraints)if(!predicate.prove)return Output::err({Error::Code::Unsupported,pattern.origin+": unbound target predicate: "+predicate.name});
   std::map<NodeId,const Node*> nodes;std::map<NodeId,std::vector<NodeId>> users;
   for(auto& n:p.nodes){nodes[n.id]=&n;for(auto id:n.inputs)users[id].push_back(n.id);}
   std::vector<Candidate> candidates;
@@ -78,7 +87,18 @@ std::vector<Candidate> match(const Program& input,const std::vector<Pattern>& pa
     };
     auto tree=pattern_tree(pat);
     if(!visit(n.id,tree)||(effects&&!pat.supports_side_effects))continue;
+    auto memory_count=std::count_if(c.covered.begin(),c.covered.end(),[&](auto id){return bool(nodes.at(id)->access);});
+    if((memory_count>1&&!pat.fused_memory)||(pat.fused_memory&&!memory_count))continue;
     if(!std::all_of(pat.constraints.begin(),pat.constraints.end(),[&](auto& constraint){auto& operand=*nodes.at(bindings.at(constraint.operand));std::optional<metacode::BoundOperand> other;if(metacode::relational(constraint.predicate)){auto& node=*nodes.at(bindings.at(constraint.other));other=metacode::BoundOperand{node.id,node.constant};}return metacode::satisfies(constraint,{operand.id,operand.constant},other);}))continue;
+    if(pat.host_constraints.empty()&&std::any_of(c.covered.begin(),c.covered.end(),[&](auto id){return !nodes.at(id)->metadata.empty();}))continue;
+    if(!pat.host_constraints.empty()){
+      auto facts=[&](NodeId id){auto& node=*nodes.at(id);return schedrow::operand_facts(id,node.op,node.type,node.register_class,node.constant,node.metadata,node.access,node.side_effect,node.call,node.terminator,node.may_trap,node.inputs);};
+      metacode::Value::Object bound;for(auto& [name,id]:bindings)bound[name]=facts(id);metacode::Value::Array covered;for(auto id:c.covered)covered.push_back(facts(id));
+      metacode::Value::Object context{{"root",facts(n.id)},{"bindings",metacode::Value(std::move(bound))},{"covered",metacode::Value(std::move(covered))}};
+      if(pat.fused_memory){context["memory_contract"]=schedrow::metadata::value(*pat.fused_memory);metacode::Value::Array order;for(auto& node:p.nodes)if(std::find(c.covered.begin(),c.covered.end(),node.id)!=c.covered.end())order.push_back(facts(node.id));context["source_order"]=metacode::Value(std::move(order));}
+      auto proved=metacode::prove_host_constraints(pat.host_constraints,context);if(!proved)return Output::err(proved.error());if(!proved.value())continue;
+      for(auto& predicate:pat.host_constraints)c.reason+="; proved "+predicate.name;
+    }
     for(auto& constraint:pat.constraints){c.reason+="; proved "+std::string(metacode::predicate_name(constraint.predicate))+"("+constraint.operand;if(!constraint.other.empty())c.reason+=","+constraint.other;if(constraint.value)c.reason+=","+std::to_string(*constraint.value);c.reason+=")";}
      std::sort(c.covered.begin(),c.covered.end());
      if(std::any_of(c.inputs.begin(),c.inputs.end(),[&](auto id){return std::binary_search(c.covered.begin(),c.covered.end(),id);}))continue;
@@ -89,18 +109,21 @@ std::vector<Candidate> match(const Program& input,const std::vector<Pattern>& pa
       for(auto& b:p.blocks)if(std::find(b.live_out.begin(),b.live_out.end(),id)!=b.live_out.end())escapes=true;
       if(nodes.at(id)->control!=schedrow::ControlFlow::None)escapes=true;
       // Preserve effect placement: explicit ordering may not be hidden by fusion.
-      for(auto& d:p.dependencies)if(d.producer==id||d.consumer==id)escapes=true;
+      for(auto& d:p.dependencies)if(d.producer==id||d.consumer==id)if(!pat.fused_memory||!std::binary_search(c.covered.begin(),c.covered.end(),d.producer)||!std::binary_search(c.covered.begin(),c.covered.end(),d.consumer))escapes=true;
     }
     if(escapes)continue;
     candidates.push_back(std::move(c));
   }
   std::sort(candidates.begin(),candidates.end(),[](auto& a,auto& b){return std::tie(a.root,a.cost,a.pattern)<std::tie(b.root,b.cost,b.pattern);});
-  return candidates;
+  return Output::ok(std::move(candidates));
+}
+std::vector<Candidate> match(const Program& input,const std::vector<Pattern>& patterns) {
+  auto result=match_checked(input,patterns);return result?std::move(result.value()):std::vector<Candidate>{};
 }
 Result<ConstraintModel> build_model(const Program& input,const std::vector<Pattern>& patterns) {
   auto prepared=prepare(input);if(!prepared)return Result<ConstraintModel>::err(prepared.error());const auto& p=prepared.value();
   auto valid=validate(p,patterns);if(!valid)return Result<ConstraintModel>::err(valid.error());
-  ConstraintModel m{match(p,patterns),{}};
+  auto matched=match_checked(p,patterns);if(!matched)return Result<ConstraintModel>::err(matched.error());ConstraintModel m{std::move(matched.value()),{}};
   if(m.candidates.size()>static_cast<size_t>(std::numeric_limits<int32_t>::max()/128))return Result<ConstraintModel>::err({Error::Code::ResourceLimit,"too many candidates"});
   for(auto& n:p.nodes)if(n.required) {
     std::vector<int32_t> covering;
@@ -171,7 +194,7 @@ Result<Selection> solve(const Program& p,const std::vector<Pattern>& patterns) {
 Result<Selection> solve_greedy(const Program& input,const std::vector<Pattern>& patterns) {
   auto prepared=prepare(input);if(!prepared)return Result<Selection>::err(prepared.error());const auto& p=prepared.value();
   auto valid=validate(p,patterns);if(!valid)return Result<Selection>::err(valid.error());
-  auto candidates=match(p,patterns);std::sort(candidates.begin(),candidates.end(),[](auto& a,auto& b){return std::tie(a.cost,a.pattern,a.root)<std::tie(b.cost,b.pattern,b.root);});
+  auto matched=match_checked(p,patterns);if(!matched)return Result<Selection>::err(matched.error());auto candidates=std::move(matched.value());std::sort(candidates.begin(),candidates.end(),[](auto& a,auto& b){return std::tie(a.cost,a.pattern,a.root)<std::tie(b.cost,b.pattern,b.root);});
   Selection s;std::unordered_set<NodeId> covered;int64_t cost=0;
   for(auto& c:candidates)if(std::none_of(c.covered.begin(),c.covered.end(),[&](auto id){return covered.contains(id);})) {
     s.selected.push_back(c);cost+=c.cost;covered.insert(c.covered.begin(),c.covered.end());
@@ -184,7 +207,7 @@ Result<Selection> solve_greedy(const Program& input,const std::vector<Pattern>& 
 Result<schedrow::Region> emit_scheduler(const Program& input,const std::vector<Pattern>& patterns,const Selection& selection) {
   auto prepared=prepare(input);if(!prepared)return Result<schedrow::Region>::err(prepared.error());const auto& p=prepared.value();
   auto valid=validate(p,patterns);if(!valid)return Result<schedrow::Region>::err(valid.error());
-  auto candidates=match(p,patterns);std::map<NodeId,NodeId> owner;std::map<PatternId,const Pattern*> pats;
+  auto matched=match_checked(p,patterns);if(!matched)return Result<schedrow::Region>::err(matched.error());auto candidates=std::move(matched.value());std::map<NodeId,NodeId> owner;std::map<PatternId,const Pattern*> pats;
   for(auto& pat:patterns)pats[pat.id]=&pat;
   int64_t cost=0;
   for(auto& c:selection.selected) {
@@ -202,18 +225,20 @@ Result<schedrow::Region> emit_scheduler(const Program& input,const std::vector<P
   std::sort(selected.begin(),selected.end(),[](auto& a,auto& b){return a.root<b.root;});
   for(auto& c:selected) {
     schedrow::Instruction i{};i.id=c.root;i.opcode=pats.at(c.pattern)->instruction;i.defs=c.outputs;i.uses=c.inputs;
+    i.access=pats.at(c.pattern)->fused_memory;i.memory=bool(i.access);
     i.block=nodes.at(c.root)->block;i.block_targets=nodes.at(c.root)->block_targets;i.control=nodes.at(c.root)->control;
     for(auto value:c.inputs)if(!nodes.at(value)->register_class.empty())i.register_classes[value]=nodes.at(value)->register_class;
     for(auto value:c.outputs)if(!nodes.at(value)->register_class.empty())i.register_classes[value]=nodes.at(value)->register_class;
+    for(auto id:c.inputs)if(!nodes.at(id)->metadata.empty())i.source_metadata[id]=nodes.at(id)->metadata;
       i.origin="pattern "+std::to_string(c.pattern)+", root "+std::to_string(c.root);
       if(!pats.at(c.pattern)->origin.empty())i.origin+="; "+pats.at(c.pattern)->origin;
      for(auto id:c.covered) {
        const auto& node=*std::find_if(p.nodes.begin(),p.nodes.end(),[&](auto& n){return n.id==id;});
+       if(!node.metadata.empty())i.source_metadata[id]=node.metadata;
        if(node.constant)i.immediates.emplace_back(id,*node.constant);
          if(node.side_effect||node.access||node.call||node.terminator||node.may_trap||node.control!=schedrow::ControlFlow::None)i.speculative=false;
         if(node.access) {
-          if(i.access)return Result<schedrow::Region>::err({Error::Code::Unsupported,"fusing multiple memory accesses requires a target effect adapter"});
-          i.access=node.access;i.memory=true;
+          if(!pats.at(c.pattern)->fused_memory){if(i.access)return Result<schedrow::Region>::err({Error::Code::Unsupported,"fusing multiple memory accesses requires a target effect adapter"});i.access=node.access;}i.memory=true;
         }
           i.call|=node.call;i.terminator|=node.terminator;i.may_trap|=node.may_trap;
           i.call|=node.control==schedrow::ControlFlow::Call;i.terminator|=node.control!=schedrow::ControlFlow::None&&node.control!=schedrow::ControlFlow::Call;

@@ -8,11 +8,16 @@
 #include "../limeburg/target.hpp"
 #include "../traceml/traceml.hpp"
 #include "../bin2bin/object.hpp"
+#include "../bin2bin/bin2bin.hpp"
+#include "../schedrow/motion.hpp"
 namespace limestone {
 enum class SelectionStrategy { Global, Greedy, BURS };
-enum class AllocationStrategy { LinearScan, Greedy, GraphColoring, Constraint };
+enum class AllocationStrategy { LinearScan, Greedy, GraphColoring, Constraint, PBQP };
 // Physical allocation requires an explicit target register model.
-struct PipelineOptions { bool optimize=true, schedule=true, allocate=false; SelectionStrategy selector=SelectionStrategy::Global; AllocationStrategy allocator=AllocationStrategy::LinearScan; bool encode=false; bool trace_execution=false; };
+struct PipelineOptions { bool optimize=true, schedule=true, allocate=false; SelectionStrategy selector=SelectionStrategy::Global; AllocationStrategy allocator=AllocationStrategy::LinearScan; bool encode=false; bool trace_execution=false; regtl::PbqpOptions pbqp;
+  std::vector<schedrow::MotionRequest> motion;
+  size_t motion_work_limit=1000000;
+};
 struct InstructionModel {
   std::optional<uint32_t> latency;
   double throughput=1;
@@ -23,6 +28,7 @@ struct InstructionModel {
   std::optional<schedrow::MemoryAccess> access;
   bool call=false, terminator=false, may_trap=false;
   std::vector<uint32_t> issue_slots;
+  uint32_t issue_width=1;
   std::vector<uint32_t> early_definitions;
   // Definition/use operand indices, resolved only after selection.
    std::vector<std::pair<uint32_t,uint32_t>> ties;
@@ -37,7 +43,15 @@ struct InstructionModel {
       metacode::Value::Object metadata;
       // Selected operand index -> required physical identity. These constrain
       // allocation; they are not architectural implicit state definitions/uses.
-      std::map<uint32_t,uint32_t> fixed_definitions, fixed_uses;
+       std::map<uint32_t,uint32_t> fixed_definitions, fixed_uses;
+        // Target proof that a pure SSA definition can be recomputed. Recipe
+        // operand lifetimes are extended before physical allocation.
+        bool rematerializable=false;
+        std::optional<schedrow::LatencyRange> latency_range, memory_latency;
+        std::unordered_map<uint32_t,schedrow::LatencyRange> result_latency_ranges, implicit_result_latency_ranges;
+        // Explicit results are definition indices here, SSA identities after
+        // selection. Architectural result IDs remain physical identities.
+        std::vector<schedrow::OperandLatency> operand_latencies;
 };
 struct Module;
 struct Relocation { size_t offset; std::string kind, symbol; int64_t addend=0; };
@@ -62,6 +76,13 @@ struct PipelineTarget {
      // Resolve target grouping over selected identities without altering semantics.
       std::function<Result<std::vector<schedrow::InstructionGroup>>(const unisel::Program&,const schedrow::Region&)> grouping_adapter;
        metacode::Value::Object metadata;
+       std::vector<regtl::RegisterStorage> register_storage;
+        std::vector<regtl::RegisterTuple> register_tuples;
+        // Semantic proof for requested cross-block motion with restricted
+        // speculation/effects. SSA and dependence legality are always checked.
+         decltype(schedrow::MotionOptions::prove) motion_proof;
+          regtl::SpillOptions spill_options;
+          std::optional<regtl::SpillAdapter> spill_adapter;
 };
 struct Module {
   std::string name; std::string machine_ir;
@@ -85,6 +106,7 @@ struct Module {
 Result<PipelineTarget> make_target(const unisel::MachineDescription&);
 // Infobank ingress also installs the metadata codec when its contract is supported.
 Result<PipelineTarget> make_target(const metacode::Architecture&);
+Result<PipelineTarget> make_target(const metacode::Architecture&,const bin2bin::CodecAdapter&);
 // Source convenience entry: closed TraceML integer computations -> portable IR.
 Result<Module> run_pipeline(std::string_view input, const PipelineOptions& options = PipelineOptions{});
 // Closed TraceML evaluation/trace lowering followed by the explicit target's

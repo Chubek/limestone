@@ -24,3 +24,15 @@ struct exl_fixture_small exl_fixture_data_small(struct exl_fixture_small value) 
 struct exl_fixture_hfa exl_fixture_data_hfa(struct exl_fixture_hfa value,float delta) {value.x+=delta;value.y+=delta;value.z+=delta;value.w+=delta;return value;}
 struct exl_fixture_nested exl_fixture_data_nested(struct exl_fixture_nested value) {value.tag+=1;value.pair.count+=2;value.pair.weight*=3;value.lanes[0]+=4;value.lanes[1]+=5;value.lanes[2]+=6;return value;}
 struct exl_fixture_large exl_fixture_data_large(struct exl_fixture_large a,struct exl_fixture_large b) {size_t k;for(k=0;k<8;++k)a.values[k]+=b.values[k];a.weight+=b.weight;return a;}
+struct exl_fixture_pair exl_fixture_data_variadic(float bias,int64_t count,...) {
+  va_list arguments;int64_t index;struct exl_fixture_pair result={0,bias};va_start(arguments,count);
+  for(index=0;index<count;++index) {
+    struct exl_fixture_pair pair=va_arg(arguments,struct exl_fixture_pair);
+    struct exl_fixture_hfa lanes=va_arg(arguments,struct exl_fixture_hfa);
+    struct exl_fixture_large large=va_arg(arguments,struct exl_fixture_large);
+    int32_t integer=va_arg(arguments,int32_t);double weight=va_arg(arguments,double);void *pointer=va_arg(arguments,void *);
+    result.count+=pair.count+large.values[0]+integer+*(int32_t *)pointer;
+    result.weight+=pair.weight+lanes.x+lanes.y+lanes.z+lanes.w+large.weight+weight;
+  }
+  va_end(arguments);return result;
+}

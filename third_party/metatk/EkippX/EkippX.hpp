@@ -1005,6 +1005,11 @@ private:
 /**
  * @brief Main runtime and execution context for one EkippX session.
  */
+struct ExpansionSpan {
+  std::size_t output_begin{}, output_end{}, source_begin{}, source_end{};
+  bool expanded{};
+};
+struct MappedExpansion { String output; std::vector<ExpansionSpan> spans; };
 class Context {
 public:
   Context() = default;
@@ -1060,6 +1065,14 @@ public:
   [[nodiscard]] String expand_text(StringView input, StringView source_name = "<memory>") {
     if (input.size() > config_.limits.max_input_size) throw LimitError("input exceeds configured maximum size");
     return expand_text_impl(input, source_name, 0);
+  }
+  // Complete top-level byte mapping. Generated text is attributed to its
+  // invocation range; unchanged bytes retain their exact original offsets.
+  [[nodiscard]] MappedExpansion expand_mapped(StringView input, StringView source_name = "<memory>") {
+    if (input.size() > config_.limits.max_input_size) throw LimitError("input exceeds configured maximum size");
+    MappedExpansion result;
+    result.output = expand_text_impl(input, source_name, 0, &result.spans);
+    return result;
   }
 
   [[nodiscard]] ParseResult lex(StringView input, StringView source_name = "<memory>") const {
@@ -1305,11 +1318,20 @@ public:
   }
 
 private:
-  [[nodiscard]] String expand_text_impl(StringView input, StringView source_name, std::size_t depth) {
+  [[nodiscard]] String expand_text_impl(StringView input, StringView source_name, std::size_t depth, std::vector<ExpansionSpan>* spans = nullptr) {
     if (depth > config_.limits.max_recursion_depth) throw LimitError("maximum recursion depth exceeded");
     std::string result;
     std::size_t cursor = 0;
     std::size_t steps = 0;
+    auto literal = [&] {
+      const auto output_begin = result.size();result.push_back(input[cursor]);
+      if (spans) {
+        if (!spans->empty() && !spans->back().expanded && spans->back().output_end == output_begin && spans->back().source_end == cursor) {
+          ++spans->back().output_end; ++spans->back().source_end;
+        } else spans->push_back({output_begin,result.size(),cursor,cursor+1,false});
+      }
+      ++cursor;
+    };
     while (cursor < input.size()) {
       if (++steps > config_.limits.max_output_size) {
         (void)record_trace(TraceEventKind::limit, "runtime", "step-limit", {}, std::nullopt, false, "expansion step limit exceeded");
@@ -1317,14 +1339,14 @@ private:
       }
       const char sigil = input[cursor];
       if (sigil != '@' && sigil != '&' && sigil != '$') {
-        result.push_back(input[cursor++]);
+        literal();
         continue;
       }
 
       auto name_input = dsl::ParsecInput{input.substr(cursor + 1), 0};
       auto parsed_name = detail::identifier_parser()(name_input);
       if (!parsed_name) {
-        result.push_back(input[cursor++]);
+        literal();
         continue;
       }
 
@@ -1334,7 +1356,7 @@ private:
       const std::size_t name_size = (*parsed_name).size();
       const std::size_t open_index = cursor + 1 + name_size;
       if (open_index >= input.size() || input[open_index] != open) {
-        result.push_back(input[cursor++]);
+        literal();
         continue;
       }
       const auto close_index = detail::find_matching(input, open_index, open, close);
@@ -1352,6 +1374,7 @@ private:
       }
 
       const auto previous_output_size = output_.size();
+      const auto previous_result_size = result.size();
       const char* category = sigil == '@' ? "directive" : (sigil == '&' ? "function" : "expander");
       const auto trace_id = record_trace(TraceEventKind::enter, category, invocation.callee, invocation.args, invocation.range, false, {});
       try {
@@ -1368,6 +1391,8 @@ private:
         finish_trace(trace_id, false, error.what());
         throw;
       }
+      if (result.size() > config_.limits.max_output_size) throw LimitError("output exceeds configured maximum size");
+      if (spans && result.size() > previous_result_size) spans->push_back({previous_result_size,result.size(),cursor,*close_index+1,true});
       cursor = *close_index + 1;
     }
     return result;

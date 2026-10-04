@@ -1,4 +1,5 @@
 #include "metacode.hpp"
+#include "json.hpp"
 #include <charconv>
 #include <fstream>
 #include <limits>
@@ -10,15 +11,16 @@ extern "C" D_ParserTables parser_tables_isa;
 namespace limestone::metacode {
 namespace {
 std::string quote(std::string_view text) {
+  constexpr char hex[]="0123456789abcdef";
   std::string out="\"";
-  for (char c : text) {
+  for (unsigned char c : text) {
     switch (c) {
       case '\\': out+="\\\\"; break;
       case '"': out+="\\\""; break;
       case '\n': out+="\\n"; break;
       case '\r': out+="\\r"; break;
       case '\t': out+="\\t"; break;
-      default: out+=c;
+      default: if(c<32){out+="\\u00";out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);
     }
   }
   return out+'"';
@@ -27,15 +29,6 @@ std::string_view trim(std::string_view s) {
   const auto b=s.find_first_not_of(" \t\r\n");
   if (b==s.npos) return {};
   return s.substr(b,s.find_last_not_of(" \t\r\n")-b+1);
-}
-std::string unquote(std::string_view s) {
-  std::string out;
-  for (size_t i=1;i+1<s.size();++i) {
-    if (s[i]!='\\') { out+=s[i]; continue; }
-    char c=s[++i];
-    out+= c=='n'?'\n':c=='r'?'\r':c=='t'?'\t':c;
-  }
-  return out;
 }
 struct Reader {
   std::string_view input, file;
@@ -74,7 +67,11 @@ struct Reader {
   Value value(D_ParseNode* n) const {
     const auto s=text(n);
     Value v;
-    if (!s.empty() && s.front()=='"') v=Value(unquote(s));
+    if (!s.empty() && s.front()=='"') {
+      auto parsed=parse_json(s,file);
+      if(!parsed)fail(n,"invalid quoted metadata string: "+parsed.error().message);
+      v=std::move(parsed.value());
+    }
     else if (s=="true" || s=="false") v=Value(s=="true");
     else if (!s.empty() && s.front()=='{') {
       auto fs=collect(n,"Fields");v=Value(fields(fs.front()));
@@ -92,7 +89,11 @@ struct Reader {
         uint64_t hex=0;auto [p,e]=std::from_chars(s.data()+2,s.data()+s.size(),hex,16);
         if(e!=std::errc{} || p!=s.data()+s.size())fail(n,"invalid hexadecimal integer");
         v=Value(hex);
-      } else if(err==std::errc::result_out_of_range && s.find_first_not_of("-0123456789")==s.npos)fail(n,"integer out of range");
+      } else if(err==std::errc::result_out_of_range && s.find_first_not_of("-0123456789")==s.npos) {
+        uint64_t natural=0;auto [end,error]=std::from_chars(s.data(),s.data()+s.size(),natural);
+        if(error!=std::errc{}||end!=s.data()+s.size())fail(n,"integer out of range");
+        v=Value(natural);
+      }
       else if(auto list=child(n,"BareList");list && s.find(',')!=s.npos) {
         Value::Array a;for(auto x:collect(list,"BareAtom"))a.emplace_back(std::string(text(x)));v=Value(std::move(a));
       } else v=Value(std::string(s));
@@ -137,6 +138,7 @@ std::string Value::text() const {
 
 Result<Architecture> parse_isa(std::string_view input,std::string_view file) {
   if(input.size()>static_cast<size_t>(std::numeric_limits<int>::max()))return Result<Architecture>::err({Error::Code::InvalidArgument,"ISA input too large"});
+  if(auto offset=input.find('\0');offset!=input.npos)return Result<Architecture>::err({Error::Code::Parse,std::string(file)+": embedded NUL at byte "+std::to_string(offset)});
   size_t depth=0;bool quoted=false,escape=false,comment=false;
   for(char c:input) {
     if(comment){if(c=='\n')comment=false;continue;}
@@ -162,7 +164,10 @@ Result<Architecture> parse_isa(std::string_view input,std::string_view file) {
       auto name=r.child(n,"Ident");auto fs=r.child(n,"Fields");
       if(kind=="Arch") {
         if(!a.name.empty())r.fail(n,"multiple architectures");
-        a.name=r.text(name);a.fields=r.fields(fs);a.source=r.source(n);
+        a.name=r.text(name);a.source=r.source(n);
+        auto fields=r.fields(fs);
+        std::vector<std::string> keys;for(auto& [key,value]:fields)keys.push_back(key);std::sort(keys.begin(),keys.end());
+        for(auto& key:keys)if(!a.fields.emplace(key,std::move(fields.at(key))).second)r.fail(n,"duplicate section: "+key);
       } else if(kind=="Regclass") {
         auto klass=std::string(r.text(name));if(!classes.insert(klass).second)r.fail(n,"duplicate register class");
         std::unordered_set<std::string> names;

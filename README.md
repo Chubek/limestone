@@ -21,6 +21,14 @@ machine-independent graph -> Tunah -> Unisel / Limeburg
 TraceML supplies a metatracing frontend. Exolayer supplies the native C ABI/FFI
 boundary. VMWeave generates embeddable VM execution skeletons.
 
+## Manual
+
+The [Limestone manual](manual/README.md) provides 22 comprehensive chapters covering
+architecture, build and installation, worked examples, every subsystem, C/C++ and
+Python embedding, target development, and diagnostics. Start with
+[the first-program workflows](manual/03-first-programs-and-workflows.md) for a
+hands-on introduction.
+
 ## Build and test
 
 Requirements: CMake 3.20+, a C compiler, a C++20 compiler, and Perl. The parser,
@@ -32,6 +40,24 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j 4
 ctest --test-dir build --output-on-failure -j 4
 ```
+
+C++ AddressSanitizer and UndefinedBehaviorSanitizer validation can use a separate
+Clang build:
+
+```sh
+cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
+  -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' \
+  -DCMAKE_SHARED_LINKER_FLAGS='-fsanitize=address,undefined'
+cmake --build build-sanitize -j 4
+UBSAN_OPTIONS=halt_on_error=1 ctest --test-dir build-sanitize --output-on-failure -j 4
+```
+
+Runners using `ptrace` may prevent LeakSanitizer from starting. In that environment,
+prefix both the sanitizer build and test commands with
+`ASAN_OPTIONS=detect_leaks=0`; address and undefined-behavior checks remain enabled,
+but leak checking is unavailable.
 
 Configuration options:
 
