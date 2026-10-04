@@ -1,5 +1,5 @@
 set(SATIE_SOURCES
-  Common.cpp Satie.cpp SatieADT.cpp SatieAutomata.cpp SatieBag.cpp SatieBV.cpp
+  Common.cpp Satie.cpp SatieMemory.cpp SatieParsing.cpp SatieADT.cpp SatieAutomata.cpp SatieBag.cpp SatieBV.cpp
   SatieCDCL.cpp SatieDPLL.cpp SatieEUF.cpp SatieFP.cpp SatieIDL.cpp SatieISL.cpp
   SatieLIA.cpp SatieLP.cpp SatieMILP.cpp SatieModule.cpp SatieNative.cpp SatieNRA.cpp
   SatieODE.cpp SatiePlugin.cpp SatiePoly.cpp SatieQuant.cpp SatieSAT.cpp

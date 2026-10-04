@@ -58,13 +58,13 @@ Encoding rule:
 
 ### At-most-one (pairwise)
 
-For set \(S = \{x_1...x_n\}\):
+For set `S = {x_1, ..., x_n}`:
 
-\[
-\bigwedge_{i<j}(\neg x_i \lor \neg x_j)
-\]
+Add `(¬x_i ∨ ¬x_j)` for every pair `i < j`.
 
-Complexity: \(O(n^2)\) clauses.
+Complexity: `O(n²)` clauses. The
+[standard-library encoders](14-Standard-Library.md) also expose
+sequential-counter encodings for at-most/at-least-k constraints.
 
 ### Exactly-one
 

@@ -33,12 +33,7 @@ struct LispFormula
 namespace lisp_detail
 {
 
-struct Node
-{
-  bool is_list = false;
-  std::string atom;
-  std::vector<Node> children;
-};
+using Node = SExpression;
 
 class Tokenizer
 {
@@ -90,25 +85,7 @@ private:
 inline Node parse_node (const std::vector<std::string> &tokens, std::size_t &pos,
                         std::size_t line)
 {
-  if (pos >= tokens.size ())
-    throw ParseError (line, 1, "unexpected end of SatieLisp input");
-  if (tokens[pos] == "(")
-    {
-      ++pos;
-      Node node;
-      node.is_list = true;
-      while (pos < tokens.size () && tokens[pos] != ")")
-        node.children.push_back (parse_node (tokens, pos, line));
-      if (pos >= tokens.size ())
-        throw ParseError (line, 1, "unterminated list");
-      ++pos;
-      return node;
-    }
-  if (tokens[pos] == ")")
-    throw ParseError (line, 1, "unexpected ')'");
-  Node node;
-  node.atom = tokens[pos++];
-  return node;
+  return parse_expression_tokens (tokens, pos, line);
 }
 
 inline bool is_valid_atom (const std::string &atom)
@@ -170,13 +147,10 @@ inline std::string to_dsl (const Node &node, std::size_t line)
 
 inline LispFormula parse_satielisp (const std::string &text)
 {
-  lisp_detail::Tokenizer tokenizer (text);
-  std::vector<std::string> tokens = tokenizer.tokenize ();
-  std::size_t pos = 0;
-  lisp_detail::Node root =
-      lisp_detail::parse_node (tokens, pos, tokenizer.line ());
-  if (pos != tokens.size ())
-    throw ParseError (tokenizer.line (), 1, "unexpected trailing SatieLisp input");
+  auto expressions = parse_sexpressions (text);
+  if (expressions.size () != 1)
+    throw ParseError (1, 1, "expected one SatieLisp formula");
+  const auto &root = expressions.front ();
   BoolFormula boolean = parse_bool_formula (lisp_detail::to_dsl (root, 1));
   return LispFormula{ std::move (boolean.cnf), std::move (boolean.symbols) };
 }

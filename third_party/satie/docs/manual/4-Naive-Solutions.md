@@ -18,8 +18,9 @@ Per node:
 
 ## Complexity
 
-- worst-case time: \(O(2^n \cdot m \cdot k)\), with `m` clauses and average clause width `k`;
-- space: \(O(n)\) assignment + recursion overhead.
+- worst-case time: `O(2ⁿ × m × k)`, with `m` clauses and average clause width `k`;
+- space: `O(n)` for assignment storage and recursion, in addition to the
+  CNF. Branches assign/unassign the same working assignment.
 
 ## Statistics semantics
 
@@ -36,6 +37,27 @@ Per node:
 Constraint:
 
 - throws `std::overflow_error` when variable count exceeds 63-bit feasible counting range guard (`>=64`).
+
+Counting includes unused variables retained by the declared variable
+count. For example, an empty CNF with two declared variables has four
+models. `count_models_naive(cnf)` is the free-function equivalent. See
+[Using Satie](6-Using-Satie.md) for the CNF and assignment conventions.
+
+```cpp
+#include "SatieNative.hpp"
+#include <cassert>
+
+int main()
+{
+    satie::CNF problem;
+    problem.set_declared_variable_count(2);
+    assert(satie::count_models_naive(problem) == 4);
+    problem.add_clause({1});
+    assert(satie::count_models_naive(problem) == 2); // Variable 2 is still free.
+    problem.add_clause({-1});
+    assert(satie::count_models_naive(problem) == 0);
+}
+```
 
 ## Usage recommendations
 

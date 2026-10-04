@@ -1,0 +1,5 @@
+c Satie frontend sample: prefer x1 and x2, avoid paying for both
+p wcnf 2 3 10
+10 1 0
+10 2 0
+1 -1 -2 0

@@ -2,7 +2,8 @@
 
 ## Problem definition
 
-Boolean satisfiability (SAT) asks whether there exists an assignment \(\sigma: V \rightarrow \{0,1\}\) such that formula \(F\) evaluates to true.
+Boolean satisfiability (SAT) asks whether there exists an assignment
+`σ: V → {0,1}` such that formula `F` evaluates to true.
 
 - Decision output: `SAT` or `UNSAT`.
 - Witness output (for `SAT`): model assignment.
@@ -12,9 +13,11 @@ Boolean satisfiability (SAT) asks whether there exists an assignment \(\sigma: V
 
 Satie operates on Conjunctive Normal Form (CNF):
 
-\[
-F = \bigwedge_{i=1}^{m} C_i, \quad C_i = \bigvee_{j} l_{ij}, \quad l_{ij} \in \{x_k, \neg x_k\}
-\]
+```text
+F = C_1 ∧ C_2 ∧ ... ∧ C_m
+C_i = l_i1 ∨ l_i2 ∨ ... ∨ l_ik
+l_ij is a variable x or its negation ¬x.
+```
 
 Semantics:
 
@@ -50,7 +53,7 @@ Assignment domain:
 
 ## Satisfiability and conflict predicates
 
-Given partial assignment \(A\):
+Given partial assignment `A`:
 
 - clause-satisfied: some literal evaluates `TRUE`;
 - clause-conflicting: all literals evaluate `FALSE`;

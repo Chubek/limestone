@@ -1,0 +1,5 @@
+(rewrite
+  (name "eliminate-epsilon-productions")
+  (rules
+    (remove-epsilon-productions)
+    (eliminate-useless-symbols)))

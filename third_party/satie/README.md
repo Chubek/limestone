@@ -23,6 +23,12 @@ cd build && ctest
 Requirements: a C++20 compiler. The library, CLI, REPL, tests, and examples
 depend only on the standard library.
 
+When `ldc2`, `dmd`, or `gdc` is available, the default build also compiles
+the D modules in `frontends/` into `libsatie_frontends.a`. Select a compiler
+with `-DD_COMPILER=/path/to/compiler`, or disable the D library with
+`-DBUILD_D_FRONTENDS=OFF`. With testing enabled, the D test executables are
+built alongside the library; `ctest` runs them without recompiling sources.
+
 ## Components
 
 | Path | Description |
@@ -71,6 +77,7 @@ satie> :model
 | `INSTALL_CLI` | `ON` | Build and install `satie-cli` / `satie-repl`. |
 | `BUILD_TESTING` | `ON` | Build the Catch2 test suite. |
 | `BUILD_EXAMPLES` | `ON` | Build example programs. |
+| `BUILD_D_FRONTENDS` | `ON` when a D compiler is found | Build and install the D frontend library. |
 | `GENERATE_DOCS` | `OFF` | Run Doxygen to generate API docs. |
 | `INSTALL_FISH/ZSH/BASH/VIM/LSP/SUBLIME` | `OFF` | Install distribution assets. |
 

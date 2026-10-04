@@ -1,0 +1,289 @@
+/**
+ * libchomsky3 - Extended Regular Expression Compiler and Runtime
+ * 
+ * Main header file providing the public API for compiling ERE patterns
+ * into C code or bytecode, and executing them via JIT-compiled VM.
+ */
+
+#ifndef CHOMSKY3_H
+#define CHOMSKY3_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "error.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Version information */
+#define CHOMSKY3_VERSION_MAJOR 3
+#define CHOMSKY3_VERSION_MINOR 0
+#define CHOMSKY3_VERSION_PATCH 0
+
+/* Forward declarations */
+typedef struct chomsky3_context chomsky3_context_t;
+typedef struct chomsky3_pattern chomsky3_pattern_t;
+typedef struct chomsky3_match chomsky3_match_t;
+
+/* Compilation flags */
+typedef enum {
+    CHOMSKY3_FLAG_NONE          = 0,
+    CHOMSKY3_FLAG_CASE_INSENSITIVE = 1 << 0,
+    CHOMSKY3_FLAG_MULTILINE     = 1 << 1,
+    CHOMSKY3_FLAG_DOTALL        = 1 << 2,
+    CHOMSKY3_FLAG_OPTIMIZE      = 1 << 3,
+    CHOMSKY3_FLAG_DEBUG         = 1 << 4,
+} chomsky3_flags_t;
+
+/* Compilation target */
+typedef enum {
+    CHOMSKY3_TARGET_BYTECODE,   /* Compile to bytecode for VM */
+    CHOMSKY3_TARGET_JIT,        /* Compile to JIT-compiled bytecode */
+    CHOMSKY3_TARGET_C_SOURCE,   /* Generate C source code */
+} chomsky3_target_t;
+
+/* API decoration */
+#ifndef CHOMSKY3_API
+#if defined(_WIN32) && defined(CHOMSKY3_BUILD)
+#define CHOMSKY3_API __declspec(dllexport)
+#elif defined(_WIN32)
+#define CHOMSKY3_API __declspec(dllimport)
+#else
+#define CHOMSKY3_API
+#endif
+#endif
+
+/* Compatibility aliases for legacy names kept by older callers */
+#ifndef CHOMSKY3_ERROR_PARSE_FAILED
+#define CHOMSKY3_ERROR_PARSE_FAILED CHOMSKY3_ERROR_PARSE_SYNTAX
+#endif
+#ifndef CHOMSKY3_ERROR_COMPILE_FAILED
+#define CHOMSKY3_ERROR_COMPILE_FAILED CHOMSKY3_ERROR_COMPILE_CODEGEN_FAILED
+#endif
+#ifndef CHOMSKY3_ERROR_JIT_UNAVAILABLE
+#define CHOMSKY3_ERROR_JIT_UNAVAILABLE CHOMSKY3_ERROR_JIT_NOT_AVAILABLE
+#endif
+#ifndef CHOMSKY3_ERROR_SERIALIZATION_FAILED
+#define CHOMSKY3_ERROR_SERIALIZATION_FAILED CHOMSKY3_ERROR_IO_GENERIC
+#endif
+#ifndef CHOMSKY3_ERROR_DESERIALIZATION_FAILED
+#define CHOMSKY3_ERROR_DESERIALIZATION_FAILED CHOMSKY3_ERROR_IO_GENERIC
+#endif
+
+/* Match result */
+struct chomsky3_match {
+    const char *start;          /* Start of match in input string */
+    const char *end;            /* End of match in input string */
+    size_t length;              /* Length of match */
+    size_t num_groups;          /* Number of capture groups */
+    struct {
+        const char *start;
+        const char *end;
+        size_t length;
+    } *groups;                  /* Capture group data */
+};
+
+/**
+ * Initialize a new chomsky3 context.
+ * 
+ * @return New context or NULL on failure
+ */
+chomsky3_context_t *chomsky3_context_new(void);
+
+/**
+ * Free a chomsky3 context and all associated resources.
+ * 
+ * @param ctx Context to free
+ */
+void chomsky3_context_free(chomsky3_context_t *ctx);
+
+/**
+ * Compile an ERE pattern.
+ * 
+ * @param ctx Context
+ * @param pattern ERE pattern string
+ * @param target Compilation target
+ * @param flags Compilation flags
+ * @param error Output error code (optional)
+ * @return Compiled pattern or NULL on failure
+ */
+chomsky3_pattern_t *chomsky3_compile(
+    chomsky3_context_t *ctx,
+    const char *pattern,
+    chomsky3_target_t target,
+    chomsky3_flags_t flags,
+    chomsky3_error_t *error
+);
+
+/**
+ * Free a compiled pattern.
+ * 
+ * @param pattern Pattern to free
+ */
+void chomsky3_pattern_free(chomsky3_pattern_t *pattern);
+
+/**
+ * Execute a compiled pattern against input text.
+ * 
+ * @param pattern Compiled pattern
+ * @param input Input string
+ * @param length Length of input string
+ * @param match Output match result (optional)
+ * @return true if match found, false otherwise
+ */
+bool chomsky3_exec(
+    chomsky3_pattern_t *pattern,
+    const char *input,
+    size_t length,
+    chomsky3_match_t *match
+);
+
+/**
+ * Free match result resources.
+ * 
+ * @param match Match result to free
+ */
+void chomsky3_match_free(chomsky3_match_t *match);
+
+/**
+ * Generate C source code from a compiled pattern.
+ * 
+ * @param pattern Compiled pattern
+ * @param output Output buffer
+ * @param output_size Size of output buffer
+ * @return CHOMSKY3_OK on success, error code otherwise
+ */
+chomsky3_error_t chomsky3_generate_c(
+    chomsky3_pattern_t *pattern,
+    char *output,
+    size_t output_size
+);
+
+/**
+ * Serialize a compiled pattern to ERE-Bincode format.
+ * 
+ * @param pattern Compiled pattern
+ * @param output Output buffer
+ * @param output_size Size of output buffer
+ * @param bytes_written Number of bytes written (output)
+ * @return CHOMSKY3_OK on success, error code otherwise
+ */
+chomsky3_error_t chomsky3_serialize(
+    chomsky3_pattern_t *pattern,
+    uint8_t *output,
+    size_t output_size,
+    size_t *bytes_written
+);
+
+/**
+ * Deserialize a pattern from ERE-Bincode format.
+ * 
+ * @param ctx Context
+ * @param input Input buffer containing bincode
+ * @param input_size Size of input buffer
+ * @param error Output error code (optional)
+ * @return Deserialized pattern or NULL on failure
+ */
+chomsky3_pattern_t *chomsky3_deserialize(
+    chomsky3_context_t *ctx,
+    const uint8_t *input,
+    size_t input_size,
+    chomsky3_error_t *error
+);
+
+/**
+ * Get human-readable error message.
+ * 
+ * @param error Error code
+ * @return Error message string
+ */
+const char *chomsky3_error_string(chomsky3_error_t error);
+
+/**
+ * Opaque parser handle for grammar/regex parsing.
+ */
+typedef struct chomsky3_parser chomsky3_parser;
+
+/**
+ * Parsing options used during parser lifecycle operations.
+ */
+typedef struct chomsky3_options {
+    size_t max_steps;
+    size_t max_backtrack;
+    size_t max_stack_depth;
+    int enable_jit;
+} chomsky3_options_t;
+
+/**
+ * Create a new parser from a grammar/pattern.
+ * 
+ * @param grammar Source grammar/pattern text.
+ * @param opts Optional parse options (NULL for defaults).
+ * @return New parser object or NULL on allocation/argument failure.
+ */
+chomsky3_parser *chomsky3_parser_new(const char *grammar, const chomsky3_options_t *opts);
+
+/**
+ * Parse an input string with a parser instance.
+ * 
+ * @param parser Active parser.
+ * @param input Input text.
+ * @param len Input length.
+ * @return 0 on success, non-zero on failure.
+ */
+int chomsky3_parse(chomsky3_parser *parser, const char *input, size_t len);
+
+/**
+ * Release parser resources.
+ * 
+ * @param parser Parser to free.
+ */
+void chomsky3_parser_free(chomsky3_parser *parser);
+
+/**
+ * Return the last parser error message.
+ * 
+ * @param parser Active parser.
+ * @return Null-terminated error message string, or NULL when unavailable.
+ */
+const char *chomsky3_error_message(chomsky3_parser *parser);
+
+/**
+ * Get library version string.
+ * 
+ * @return Version string (e.g., "3.0.0")
+ */
+const char *chomsky3_version(void);
+
+/**
+ * Check if JIT compilation is available.
+ * 
+ * @return true if JIT is available, false otherwise
+ */
+bool chomsky3_jit_available(void);
+
+/**
+ * @brief Get the Unicode character name for a codepoint
+ * @param codepoint Unicode codepoint (U+0000 to U+10FFFF)
+ * @return Character name string, or NULL if not found
+ * 
+ * Example: chomsky3_unicode_name(0x0041) returns "LATIN CAPITAL LETTER A"
+ */
+const char* chomsky3_unicode_name(uint32_t codepoint);
+
+/**
+ * @brief Get the codepoint for a Unicode character name
+ * @param name Official Unicode character name
+ * @return Codepoint value, or 0xFFFFFFFF if not found
+ * 
+ * Example: chomsky3_unicode_codepoint("SPACE") returns 0x0020
+ */
+CHOMSKY3_API uint32_t chomsky3_unicode_codepoint(const char *name);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* CHOMSKY3_H */

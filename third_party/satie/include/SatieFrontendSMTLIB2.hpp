@@ -34,12 +34,7 @@ namespace satie::frontend
 /// conjunctions of linear integer comparisons go through the LIA solver
 /// (sound, bounded-complete); anything mixing Boolean structure with theory
 /// atoms answers UNKNOWN honestly.
-struct SMTSExpr
-{
-  bool is_list = false;
-  std::string atom;
-  std::vector<SMTSExpr> children;
-};
+using SMTSExpr = SExpression;
 
 class SMTLexer
 {
@@ -94,25 +89,7 @@ private:
 inline SMTSExpr parse_sexpr (const std::vector<std::string> &tokens, std::size_t &pos,
                              std::size_t line)
 {
-  if (pos >= tokens.size ())
-    throw ParseError (line, 1, "unexpected end of SMT-LIB2 input");
-  if (tokens[pos] == "(")
-    {
-      ++pos;
-      SMTSExpr expr;
-      expr.is_list = true;
-      while (pos < tokens.size () && tokens[pos] != ")")
-        expr.children.push_back (parse_sexpr (tokens, pos, line));
-      if (pos >= tokens.size ())
-        throw ParseError (line, 1, "unterminated list");
-      ++pos;
-      return expr;
-    }
-  if (tokens[pos] == ")")
-    throw ParseError (line, 1, "unexpected ')'");
-  SMTSExpr expr;
-  expr.atom = tokens[pos++];
-  return expr;
+  return parse_expression_tokens (tokens, pos, line);
 }
 
 struct SMTModel
@@ -132,13 +109,10 @@ class SMTLIB2Script
 public:
   void load_text (const std::string &text)
   {
-    SMTLexer lexer (text);
-    std::vector<std::string> tokens = lexer.tokenize ();
-    std::size_t pos = 0;
-    while (pos < tokens.size ())
+    for (const SMTSExpr &command : parse_sexpressions (text))
       {
-        SMTSExpr command = parse_sexpr (tokens, pos, lexer.line ());
         run_command (command);
+        if (exited_) break;
       }
   }
 
@@ -182,6 +156,7 @@ private:
       {
         require_list (command, 2, "assert");
         asserts_.push_back (command.children[1]);
+        last_ = {};
       }
     else if (name == "check-sat")
       {
@@ -195,6 +170,7 @@ private:
       }
     else if (name == "exit")
       {
+        exited_ = true;
       }
     else if (name == "set-option" || name == "set-info")
       {
@@ -255,7 +231,7 @@ private:
     if (op == "and")
       return join_args (" & ", args, true);
     if (op == "or")
-      return join_args (" | ", args, true);
+      return args.empty () ? "false" : join_args (" | ", args, true);
     if (op == "not" && args.size () == 1)
       return "(~" + args.front () + ")";
     if (op == "=>" && args.size () == 2)
@@ -547,6 +523,7 @@ private:
   std::map<std::string, std::string> sorts_;
   std::vector<SMTSExpr> asserts_;
   bool saw_check_sat_ = false;
+  bool exited_ = false;
   SMTCheckResult last_;
 };
 

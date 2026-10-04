@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Common.hpp"
+#include "SatieMemory.hpp"
 
 namespace satie
 {
@@ -87,6 +88,10 @@ public:
   /// by them proves UNSAT.
   SolveResult solve_under (const std::vector<Lit> &assumptions)
   {
+    for (Lit lit : assumptions)
+      if (lit == 0 || lit == std::numeric_limits<Lit>::min () ||
+          static_cast<std::size_t> (literal_var (lit)) > original_.variable_count ())
+        throw std::invalid_argument ("assumption is outside the problem variable range");
     initialize ();
     assumptions_ = assumptions;
     stats_.assumptions = assumptions.size ();
@@ -592,7 +597,9 @@ private:
 
   bool is_redundant (Lit lit)
   {
-    std::vector<Lit> stack{ lit };
+    MemoryResource memory;
+    std::pmr::vector<Lit> stack (&memory);
+    stack.push_back (lit);
     while (!stack.empty ())
       {
         const Lit current = stack.back ();
@@ -684,7 +691,9 @@ private:
     if (learned_clause_indices_.size () <= max_learned_clauses_)
       return;
     ++stats_.reduced_databases;
-    std::vector<std::size_t> order = learned_clause_indices_;
+    MemoryResource memory (MemoryLifetime::Transient);
+    std::pmr::vector<std::size_t> order (learned_clause_indices_.begin (),
+                                        learned_clause_indices_.end (), &memory);
     std::sort (order.begin (), order.end (),
                [this] (std::size_t lhs, std::size_t rhs) {
                  if (clause_activity_[lhs] != clause_activity_[rhs])

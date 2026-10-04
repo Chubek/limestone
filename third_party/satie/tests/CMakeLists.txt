@@ -31,3 +31,12 @@ add_test(NAME satie_tests COMMAND satie_tests)
 add_executable(satie_sat_tests satie_sat_tests.cpp test_theory.hpp)
 target_link_libraries(satie_sat_tests PRIVATE satie::satie)
 add_test(NAME satie_sat_tests COMMAND satie_sat_tests)
+
+# GCC's optimized PMR devirtualization used to produce false array-bounds
+# warnings. Keep the reproducing allocation patterns covered at compile time.
+add_executable(satie_memory_tests satie_memory_tests.cpp)
+target_link_libraries(satie_memory_tests PRIVATE satie::satie)
+satie_apply_warnings(satie_memory_tests)
+target_compile_options(satie_memory_tests PRIVATE
+  $<$<CXX_COMPILER_ID:GNU>:-Werror=array-bounds>)
+add_test(NAME satie_memory_tests COMMAND satie_memory_tests)

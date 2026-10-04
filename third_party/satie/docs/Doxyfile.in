@@ -3,7 +3,7 @@
 
 PROJECT_NAME           = "Satie"
 PROJECT_NUMBER         = @PROJECT_VERSION@
-PROJECT_BRIEF          = "Header-only, multi-algorithm SAT solver"
+PROJECT_BRIEF          = "C++20 SAT solver, typed theory fragments, and language frontends"
 
 # --- input / output -------------------------------------------------------
 INPUT                  = @CMAKE_SOURCE_DIR@/include \
@@ -65,7 +65,7 @@ GENERATE_ECLIPSEHELP   = NO
 # --- diagrams -------------------------------------------------------------
 HAVE_DOT               = YES
 UML_LOOK               = NO
-CLASS_DIAGRAMS         = YES
+CLASS_GRAPH            = YES
 COLLABORATION_GRAPH    = YES
 INCLUDE_GRAPH          = YES
 INCLUDED_BY_GRAPH      = YES

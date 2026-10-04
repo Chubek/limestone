@@ -1,0 +1,8 @@
+(rewrite
+  (name "eliminate-ambiguity")
+  (rules
+    (remove-epsilon-productions)
+    (remove-unit-productions)
+    (remove-left-recursion)
+    (left-factor)
+    (eliminate-useless-symbols)))

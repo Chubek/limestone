@@ -1,0 +1,45 @@
+# ============================================================================
+# Simdette Ninja Build Configuration
+# ============================================================================
+
+# Variables
+cxx = g++
+cflags = -std=c++20 -O3 -Wall -Wextra -march=native
+includes = -I./include
+
+# Rules
+rule compile
+  command = $cxx $cflags $includes -c $in -o $out
+  description = CXX $out
+
+rule link
+  command = $cxx $cflags -o $out $in
+  description = LINK $out
+
+rule run_test
+  command = $out
+  description = RUNNING $out
+
+# Sources
+examples = examples/example_basics.cpp examples/example_math.cpp examples/example_dot_product.cpp examples/example_mandelbrot.cpp
+tests = tests/test_addition.cpp tests/test_math.cpp tests/test_memory_load.cpp tests/test_comprehensive.cpp tests/test_traits.cpp
+
+# Build all
+build examples: phony $(examples:.cpp=.exe)
+build tests: phony $(tests:.cpp=.exe)
+
+# Examples
+build example_basics.exe: compile examples/example_basics.cpp
+build example_math.exe: compile examples/example_math.cpp
+build example_dot_product.exe: compile examples/example_dot_product.cpp
+build example_mandelbrot.exe: compile examples/example_mandelbrot.cpp
+
+# Tests
+build test_addition.exe: compile tests/test_addition.cpp
+build test_math.exe: compile tests/test_math.cpp
+build test_memory_load.exe: compile tests/test_memory_load.cpp
+build test_comprehensive.exe: compile tests/test_comprehensive.cpp
+build test_traits.exe: compile tests/test_traits.cpp
+
+# Run tests
+build run_tests: run_test test_comprehensive.exe | examples

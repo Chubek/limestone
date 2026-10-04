@@ -1,0 +1,328 @@
+# manifests/ExtensionTk-Modules.yaml
+# Source of truth for the ExtensionTk subsystem of ExolangTk.
+# ExtensionTk provides header-only C99 libraries for building and consuming
+# native extension APIs: dynamic library loading, symbol discovery, extension
+# lifecycle management, host-side API surface registration, versioning,
+# sandboxed capability negotiation, and scripting-engine integration helpers.
+
+toolkit: ExtensionTk
+version: 0.1.0
+namespace:
+  symbol_prefix: etk_
+  macro_prefix:  ETK_
+  header_prefix: etk_
+stability_default: experimental
+
+depends_on_toolkits:
+  - InteropTk   # type model, layout, calling-convention, and marshalling primitives
+  - FFItk       # dynamic loader and call-interface building blocks
+
+modules:
+
+  - name: platform
+    header: include/ExtensionTk/etk_platform.h
+    brief: >
+      Compile-time detection of OS, architecture, and native-extension
+      capability flags. Defines ETK_OS_*, ETK_ARCH_*, and ETK_HAS_* macros
+      consumed by every other ExtensionTk module. Also resolves the platform
+      shared-library suffix (ETK_SHLIB_SUFFIX) and the symbol-visibility
+      attribute (ETK_EXPORT / ETK_IMPORT).
+    stability: stable
+    depends_on: []
+    provides:
+      macros:
+        - ETK_OS_LINUX
+        - ETK_OS_MACOS
+        - ETK_OS_WINDOWS
+        - ETK_ARCH_X86_64
+        - ETK_ARCH_AARCH64
+        - ETK_ARCH_RISCV64
+        - ETK_SHLIB_SUFFIX       # ".so" / ".dylib" / ".dll"
+        - ETK_SHLIB_PREFIX       # "lib" / ""
+        - ETK_EXPORT             # __attribute__((visibility("default"))) or __declspec(dllexport)
+        - ETK_IMPORT             # __declspec(dllimport) or empty
+        - ETK_HAS_DLOPEN
+        - ETK_HAS_LOADLIBRARY
+        - ETK_HAS_RTLD_DEEPBIND
+        - ETK_HAS_RTLD_NOLOAD
+        - ETK_HAS_DYLD_INTERPOSE
+        - ETK_CACHELINE_SIZE
+
+  - name: types
+    header: include/ExtensionTk/etk_types.h
+    brief: >
+      Shared vocabulary types across ExtensionTk: opaque library and symbol
+      handles, version descriptors, capability bitfields, extension metadata
+      records, and status/error codes. All other modules use these rather
+      than defining their own handle or version typedefs.
+    stability: stable
+    depends_on:
+      - ExtensionTk::platform
+      - InteropTk::platform
+      - InteropTk::ctypes
+    provides:
+      types:
+        - etk_lib_handle         # opaque handle to a loaded shared library
+        - etk_sym_handle         # opaque handle to a resolved symbol
+        - etk_version            # { uint16_t major; uint16_t minor; uint16_t patch; }
+        - etk_api_id             # { const char *name; etk_version version; }
+        - etk_cap_flags          # uint64_t capability bitfield
+        - etk_ext_metadata       # { etk_api_id id; etk_version abi; const char *description; }
+        - etk_status             # function return-status code
+      enums:
+        - ETK_OK
+        - ETK_ERR_INVALID
+        - ETK_ERR_NOT_FOUND
+        - ETK_ERR_UNSUPPORTED
+        - ETK_ERR_VERSION
+        - ETK_ERR_LOAD
+        - ETK_ERR_SYMBOL
+        - ETK_ERR_INIT
+        - ETK_ERR_OOM
+        - ETK_ERR_IO
+        - ETK_ERR_PERM
+
+  - name: dynload
+    header: include/ExtensionTk/etk_dynload.h
+    brief: >
+      Thin, portable wrapper around dlopen/dlsym/dlclose (POSIX) and
+      LoadLibraryEx/GetProcAddress/FreeLibrary (Windows). Provides a uniform
+      etk_lib_handle / etk_sym_handle API with structured error reporting,
+      path-search helpers, and RTLD flag abstraction. This is the lowest-level
+      loading primitive; higher-level modules build on it rather than calling
+      the OS APIs directly.
+    stability: stable
+    depends_on:
+      - ExtensionTk::platform
+      - ExtensionTk::types
+    provides:
+      types:
+        - etk_load_flags         # enum: ETK_LOAD_LAZY, ETK_LOAD_NOW, ETK_LOAD_GLOBAL,
+                                 #       ETK_LOAD_LOCAL, ETK_LOAD_NOLOAD, ETK_LOAD_DEEPBIND
+      functions:
+        - etk_lib_open           # load a shared library by path; returns etk_lib_handle
+        - etk_lib_open_flags     # load with explicit etk_load_flags
+        - etk_lib_close          # decrement reference count; unload when it reaches zero
+        - etk_lib_sym            # resolve a symbol name to etk_sym_handle
+        - etk_sym_addr           # retrieve the raw function/data pointer from a handle
+        - etk_lib_error          # retrieve the last OS error string
+        - etk_lib_path           # retrieve the resolved file-system path of a loaded library
+        - etk_lib_self           # return a handle to the calling module (dlopen(NULL) equivalent)
+
+  - name: search
+    header: include/ExtensionTk/etk_search.h
+    brief: >
+      Library search-path management: building a candidate path list from
+      environment variables (LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, PATH),
+      explicit caller-supplied directories, and standard OS locations.
+      Provides glob-style name expansion (e.g., "foo" -> "libfoo.so.2") and
+      a try-each-candidate helper that returns the first successfully loaded
+      library. Does not perform loading itself; delegates to etk_dynload.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::platform
+      - ExtensionTk::types
+      - ExtensionTk::dynload
+    provides:
+      types:
+        - etk_search_ctx         # caller-supplied search context (path list + flags)
+        - etk_search_flags       # ETK_SEARCH_ENV, ETK_SEARCH_STD, ETK_SEARCH_CALLER_DIR
+      functions:
+        - etk_search_init        # initialise a search context
+        - etk_search_add_dir     # prepend a directory to the search list
+        - etk_search_find        # locate the first matching library file; do not load
+        - etk_search_load        # locate and load; wraps etk_search_find + etk_lib_open
+        - etk_search_destroy     # release search-context resources
+
+  - name: version
+    header: include/ExtensionTk/etk_version.h
+    brief: >
+      Semantic versioning helpers and ABI compatibility predicates. Parses
+      version strings of the form "MAJOR.MINOR.PATCH[-pre]", compares
+      etk_version records, and evaluates compatibility policies
+      (semver: same major + caller_minor <= provider_minor).
+      Used by extension loading and capability negotiation to gate whether
+      a loaded library satisfies the host's requirements.
+    stability: stable
+    depends_on:
+      - ExtensionTk::types
+    provides:
+      functions:
+        - etk_version_parse      # parse "M.N.P" string into etk_version
+        - etk_version_cmp        # total order comparison (-1 / 0 / 1)
+        - etk_version_compat     # true when provider_ver satisfies required_ver under semver rules
+        - etk_version_str        # format etk_version into a caller-supplied buffer
+
+  - name: symbols
+    header: include/ExtensionTk/etk_symbols.h
+    brief: >
+      Typed symbol resolution and bulk export enumeration for a loaded
+      library. Resolves symbols by name or by a structured etk_api_id,
+      verifies function-pointer size compatibility (via InteropTk layout
+      queries), and enumerates all exported names through a callback
+      iterator. Provides a type-safe cast macro (ETK_SYM_CAST) that checks
+      pointer size before the cast.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::platform
+      - ExtensionTk::types
+      - ExtensionTk::dynload
+      - InteropTk::layout
+      - InteropTk::ctypes
+    provides:
+      types:
+        - etk_sym_info           # { etk_sym_handle handle; const char *name; void *addr; uint8_t kind; }
+        - etk_sym_kind           # enum: ETK_SYM_FUNC, ETK_SYM_DATA, ETK_SYM_WEAK
+        - etk_sym_iter_cb        # typedef etk_status (*)(const etk_sym_info *, void *user)
+      macros:
+        - ETK_SYM_CAST           # (T)(uintptr_t)(etk_sym_addr(h)) with size assertion
+      functions:
+        - etk_sym_resolve        # resolve name in a library to etk_sym_info
+        - etk_sym_resolve_api    # resolve a versioned etk_api_id symbol
+        - etk_sym_enumerate      # iterate all exported symbols via callback
+
+  - name: extension
+    header: include/ExtensionTk/etk_extension.h
+    brief: >
+      High-level extension object: wraps a loaded library, its etk_ext_metadata,
+      entry-point resolution, and init/teardown lifecycle. An etk_extension
+      represents one loaded plugin unit. Callers open an extension, negotiate
+      capabilities, and obtain a function table; they do not manage the
+      underlying library handle directly. Builds on etk_dynload, etk_symbols,
+      and etk_version.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::platform
+      - ExtensionTk::types
+      - ExtensionTk::dynload
+      - ExtensionTk::symbols
+      - ExtensionTk::version
+    provides:
+      types:
+        - etk_extension          # opaque extension instance handle
+        - etk_ext_init_fn        # typedef etk_status (*)(etk_extension *, void *host_ctx)
+        - etk_ext_fini_fn        # typedef void      (*)(etk_extension *)
+        - etk_ext_open_opts      # { etk_load_flags flags; etk_version required_abi; }
+      macros:
+        - ETK_EXT_INIT_SYM       # canonical name for the init entry point ("etk_ext_init")
+        - ETK_EXT_FINI_SYM       # canonical name for the fini entry point ("etk_ext_fini")
+        - ETK_EXT_META_SYM       # canonical name for the metadata symbol  ("etk_ext_metadata")
+      functions:
+        - etk_ext_open           # load, validate metadata, call init; returns etk_extension
+        - etk_ext_close          # call fini and unload
+        - etk_ext_metadata_get   # retrieve the extension's etk_ext_metadata
+        - etk_ext_sym            # resolve a named symbol within the extension
+        - etk_ext_lib            # retrieve the underlying etk_lib_handle
+
+  - name: registry
+    header: include/ExtensionTk/etk_registry.h
+    brief: >
+      In-process extension registry: tracks all open etk_extension instances
+      by name and version, enforces single-instance-per-api-id policies,
+      and provides lookup by name or by etk_api_id. Intended for runtimes
+      that need a central catalog of loaded plugins. The registry is a
+      caller-supplied struct (no global state) so multiple ind
+epedent runtimes
+      can coexist in one host.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::types
+      - ExtensionTk::extension
+    provides:
+      types:
+        - etk_registry           # struct: { dtk_registry_node *head; dtk_size_t count; }
+      functions:
+        - etk_registry_init      # initialize an empty registry
+        - etk_registry_add       # register an open etk_extension; fails if duplicate name
+        - etk_registry_remove    # remove and return an etk_extension by name
+        - etk_registry_lookup    # find an etk_extension by name
+        - etk_registry_find      # find an etk_extension by matching etk_api_id
+        - etk_registry_destroy   # close and remove all registered extensions
+
+  - name: capability
+    header: include/ExtensionTk/etk_capability.h
+    brief: >
+      Capability negotiation: allows the host to advertise supported services
+      and capabilities (e.g. dynamic typing, JIT execution, threading) and
+      permits extensions to request required/optional capabilities at init time.
+      Extensions query the host through a callback, and the host evaluates whether
+      to load the extension based on its capability requirements.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::types
+      - ExtensionTk::extension
+    provides:
+      types:
+        - etk_cap_desc           # { etk_cap_flags mask; const char *name; }
+        - etk_cap_negotiator     # callback structure passed to etk_ext_init_fn
+      functions:
+        - etk_cap_negotiate      # evaluate extension cap requests against host capabilities
+        - etk_cap_has            # check if a specific capability bit is set in etk_cap_flags
+        - etk_cap_set            # set a capability bit
+        - etk_cap_clear          # clear a capability bit
+
+  - name: host
+    header: include/ExtensionTk/etk_host.h
+    brief: >
+      Host-side API surface registration and dispatch. Allows a host runtime
+      to package its internal C functions into a versioned host API block
+      and register it with ExtensionTk. Extensions can retrieve the block
+      by name or API ID during initialization, obtaining typed function pointers
+      to call back into the host.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::types
+      - ExtensionTk::extension
+      - ExtensionTk::version
+    provides:
+      types:
+        - etk_host_api           # { etk_api_id id; void **functions; size_t count; }
+        - etk_host_registry      # tracks registered host APIs
+      functions:
+        - etk_host_reg_init      # initialize a host-API registry
+        - etk_host_reg_add       # publish a host-API block to the registry
+        - etk_host_reg_lookup    # retrieve a host-API block by ID
+        - etk_host_reg_destroy   # teardown the host-API registry
+
+  - name: sandbox
+    header: include/ExtensionTk/etk_sandbox.h
+    brief: >
+      Lightweight sandboxing helpers: capability-based security validation,
+      gated filesystem paths, and restricted import symbol resolution. Allows
+      a host to restrict what symbols or directories an extension can access.
+      For dynamic security, the host can intercept extension symbol resolution
+      queries and return dummy functions or error codes.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::platform
+      - ExtensionTk::types
+      - ExtensionTk::dynload
+      - ExtensionTk::search
+    provides:
+      types:
+        - etk_sandbox_rules      # { char allowed_dirs[8][256]; int dir_count; etk_cap_flags caps; }
+      functions:
+        - etk_sandbox_verify_path # check if a target library path complies with rules
+        - etk_sandbox_wrap_lib    # wrap etk_lib_handle in a sandboxed lookup proxy
+        - etk_sandbox_restrict    # apply global or thread-local sandbox rules
+
+  - name: engine
+    header: include/ExtensionTk/etk_engine.h
+    brief: >
+      Scripting-engine integration helpers: provides templates, macros, and
+      conventions to easily bind ExtensionTk extensions to dynamic scripting
+      languages (e.g. Lua, Python, JS). Maps language-specific native extension
+      entry points (e.g. "luaopen_foo") into standard etk_extension initialization.
+    stability: experimental
+    depends_on:
+      - ExtensionTk::platform
+      - ExtensionTk::types
+      - ExtensionTk::extension
+      - ExtensionTk::host
+    provides:
+      types:
+        - etk_engine_binding     # describes a language-specific extension binding mapping
+      macros:
+        - ETK_ENGINE_BIND_LUA    # template to map to Lua module exports
+        - ETK_ENGINE_BIND_PY     # template to map to Python extension exports
+        - ETK_ENGINE_BIND_JS     # template to map to JS/Node native addons

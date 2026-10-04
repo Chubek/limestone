@@ -1,0 +1,21 @@
+/**
+ * @file README.dox
+ * @brief Overview of the built-in disambiguation library.
+ *
+ * @ingroup disambstd_api
+ *
+ * The `disambstd` directory contains the standard ambiguity-resolution
+ * strategies that can be attached to a `glr_parser_t` through
+ * `glr_parser_add_disambiguator()`.
+ *
+ * Available families:
+ * - precedence-based choice
+ * - associativity-aware operator selection
+ * - syntactic predicate filtering
+ * - semantic constraint filtering
+ * - dynamic-programming cost minimization
+ * - probability scoring and winner selection
+ *
+ * These strategies are declared in `include/glr/disambiguate.h` and
+ * implemented in the corresponding `disambstd/*.c` files.
+ */

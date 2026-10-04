@@ -8,6 +8,11 @@ Primary include:
 #include "Satie.hpp"
 ```
 
+Link the compiled `satie::satie` CMake target. The facade and memory/parser
+services have out-of-line definitions; see
+[Build and Installation](10-Build-and-Installation.md). `SatieSAT.hpp`
+also supplies the `SolverType` alias and `solve_sat` convenience overloads.
+
 Core API:
 
 - `satie::Solver`
@@ -33,7 +38,7 @@ Default engine in unified API: `Engine::CDCL`.
 
 ## Input formats
 
-Satie supports two input notations:
+The facade's `ParseFormat` selects two input notations:
 
 - CNF DSL: `(a | ~b) & (c | d)`
 - DIMACS CNF:
@@ -47,8 +52,12 @@ p cnf 3 2
 
 `parse_auto` dispatches by lexical shape:
 
-- leading `p` line => DIMACS;
+- leading `p` line after blank/comment lines => DIMACS;
 - otherwise => CNF DSL.
+
+Headerless DIMACS needs an explicit format. Other languages use the
+[frontend APIs](9-Frontends.md); `ParseFormat::CNF` means the restricted
+clausal DSL, not the full Boolean-expression frontend.
 
 Deterministic parsing API:
 
@@ -109,12 +118,62 @@ SolverReport report = solve_with_report(cnf, {.engine = Engine::DPLL});
 `SolveResult`:
 
 - `status`: `SAT`, `UNSAT`, `UNKNOWN`.
-- `assignment`: model when `SAT`; empty/unknown assignment when `UNSAT`.
+- `assignment`: a satisfying Boolean model when `SAT`; do not read it as
+  a model when the status is `UNSAT` or `UNKNOWN`.
 
 Convenience predicates:
 
 - `satisfiable()`
 - `unsatisfiable()`
+
+These predicates both return false for UNKNOWN. Test `status` explicitly
+when a budgeted search or theory solver can be inconclusive.
+
+## CNF and assignment conventions
+
+`Var` and `Lit` are signed 32-bit integers. SAT variables start at one;
+a negative literal represents negation. Zero is a DIMACS terminator.
+The CNF container sorts literals by variable, removes duplicates and
+zeros, and rejects the minimum signed literal whose magnitude is not
+representable. It retains tautological clauses as input data.
+
+`CNF{}` is the empty, satisfiable conjunction; `CNF({{}})` contains an
+empty clause and is UNSAT. `set_declared_variable_count(n)` preserves
+unused variables, including when exporting DIMACS or counting models.
+`operator&` combines clauses using the same variable IDs; it does not
+rename colliding variables from independent problems.
+
+`Assignment::get_var(v)` and `get_literal(lit)` return the tri-valued
+`Value` enum. DPLL may stop with unknown don't-care variables once every
+clause is satisfied. `completed()` supplies values for unknown variables.
+Validate a returned SAT model with `is_formula_satisfied`:
+
+```cpp
+#include "Satie.hpp"
+#include <cassert>
+
+int main()
+{
+    satie::CNF problem({{1, 2}, {-1, 3}});
+    auto result = satie::solve(problem, satie::Engine::CDCL);
+    assert(result.satisfiable());
+    assert(satie::is_formula_satisfied(problem, result.assignment));
+    auto total = result.assignment.completed();
+    assert(total.fully_assigned());
+}
+```
+
+## Model counting and concrete engine controls
+
+`NaiveSolver::count_models()` and `count_models_naive(cnf)` enumerate
+all satisfying assignments over the CNF's variable universe. Counting
+resets native statistics and rejects 64 or more variables with
+`std::overflow_error`. This is exhaustive counting, not sampling.
+
+The `Solver` facade constructs an engine per call. For assumptions,
+conflict budgets, restarts, learned clauses, or cores, use `CDCLSolver`
+directly. [Solver Controls and Diagnostics](16-Solver-Controls-and-Diagnostics.md)
+documents those settings and all statistics fields.
 
 ## CNF/DIMACS interop
 
@@ -162,4 +221,8 @@ DIMACS strict checks include:
 - Use `Engine::Native` only for baseline verification and model counting experiments.
 - Normalize and export DIMACS for reproducible benchmarks.
 - Persist `SolverReport` statistics for regression tracking.
-- CDCL applies fixed conflict-interval restarts; monitor `statistics.cdcl->restarts`.
+- CDCL uses Luby-scheduled restarts; monitor `statistics.cdcl->restarts`.
+
+For C handles, read [C and Foreign Interfaces](12-C-and-Foreign-Interfaces.md).
+For scripting and reusable helpers, read [Plugins and Lua](13-Plugins-and-Lua.md)
+and [Standard Library](14-Standard-Library.md).

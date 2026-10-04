@@ -35,10 +35,7 @@ public:
   BoolFormula parse ()
   {
     BoolFormula formula;
-    Node root = parse_iff ();
-    skip_ws ();
-    if (!eof ())
-      fail ("unexpected trailing input");
+    Node root = parse_boolean_syntax (input_);
     std::map<std::string, Var> vars;
     ClauseList clauses;
     Var next = 1;
@@ -60,161 +57,7 @@ public:
   }
 
 private:
-  struct Node
-  {
-    enum class Kind
-    {
-      Var,
-      True,
-      False,
-      Not,
-      And,
-      Or,
-      Xor,
-      Imp,
-      Iff
-    };
-    explicit Node (Kind k = Kind::False) : kind (k) {}
-    Kind kind = Kind::False;
-    std::string name;
-    std::vector<Node> children;
-  };
-
-  Node parse_iff ()
-  {
-    Node left = parse_imp ();
-    while (true)
-      {
-        skip_ws ();
-        if (!consume_token ("<->"))
-          return left;
-        Node node;
-        node.kind = Node::Kind::Iff;
-        node.children.push_back (std::move (left));
-        node.children.push_back (parse_imp ());
-        left = std::move (node);
-      }
-  }
-
-  Node parse_imp ()
-  {
-    Node left = parse_or ();
-    skip_ws ();
-    if (!consume_token ("->"))
-      return left;
-    // Right-associative; `<->` already consumed above so no ambiguity.
-    Node node;
-    node.kind = Node::Kind::Imp;
-    node.children.push_back (std::move (left));
-    node.children.push_back (parse_imp ());
-    return node;
-  }
-
-  Node parse_or ()
-  {
-    std::vector<Node> parts;
-    parts.push_back (parse_xor ());
-    while (true)
-      {
-        skip_ws ();
-        if (peek () != '|')
-          break;
-        consume ();
-        if (peek () == '|')
-          consume (); // Accept `||` as an alias for `|`.
-        parts.push_back (parse_xor ());
-      }
-    if (parts.size () == 1)
-      return std::move (parts.front ());
-    Node node;
-    node.kind = Node::Kind::Or;
-    node.children = std::move (parts);
-    return node;
-  }
-
-  Node parse_xor ()
-  {
-    Node left = parse_and ();
-    while (true)
-      {
-        skip_ws ();
-        if (peek () != '^')
-          return left;
-        consume ();
-        Node node;
-        node.kind = Node::Kind::Xor;
-        node.children.push_back (std::move (left));
-        node.children.push_back (parse_and ());
-        left = std::move (node);
-      }
-  }
-
-  Node parse_and ()
-  {
-    std::vector<Node> parts;
-    parts.push_back (parse_unary ());
-    while (true)
-      {
-        skip_ws ();
-        if (peek () != '&')
-          break;
-        consume ();
-        if (peek () == '&')
-          consume (); // Accept `&&` as an alias for `&`.
-        parts.push_back (parse_unary ());
-      }
-    if (parts.size () == 1)
-      return std::move (parts.front ());
-    Node node;
-    node.kind = Node::Kind::And;
-    node.children = std::move (parts);
-    return node;
-  }
-
-  Node parse_unary ()
-  {
-    skip_ws ();
-    if (peek () == '~' || peek () == '!')
-      {
-        consume ();
-        Node node;
-        node.kind = Node::Kind::Not;
-        node.children.push_back (parse_unary ());
-        return node;
-      }
-    return parse_primary ();
-  }
-
-  Node parse_primary ()
-  {
-    skip_ws ();
-    if (peek () == '(')
-      {
-        consume ();
-        Node inner = parse_iff ();
-        skip_ws ();
-        if (peek () != ')')
-          fail ("expected ')'");
-        consume ();
-        return inner;
-      }
-    if (std::isalpha (static_cast<unsigned char> (peek ())) || peek () == '_')
-      {
-        std::string ident;
-        while (!eof () && (std::isalnum (static_cast<unsigned char> (peek ())) ||
-                           peek () == '_' || peek () == '\''))
-          ident.push_back (consume ());
-        if (ident == "true")
-          return Node (Node::Kind::True);
-        if (ident == "false")
-          return Node (Node::Kind::False);
-        Node node (Node::Kind::Var);
-        node.name = std::move (ident);
-        return node;
-      }
-    fail ("expected variable, constant, or '('");
-    return Node (Node::Kind::False);
-  }
+  using Node = BooleanSyntax;
 
   std::map<std::string, int> collect_vars (const Node &node)
   {
@@ -318,47 +161,7 @@ private:
     return 0;
   }
 
-  void skip_ws ()
-  {
-    while (!eof () && std::isspace (static_cast<unsigned char> (peek ())))
-      consume ();
-  }
-  bool eof () const { return pos_ >= input_.size (); }
-  char peek () const { return eof () ? '\0' : input_[pos_]; }
-  char peek_at (std::size_t ahead) const
-  {
-    return pos_ + ahead >= input_.size () ? '\0' : input_[pos_ + ahead];
-  }
-  char consume ()
-  {
-    const char c = input_[pos_++];
-    if (c == '\n')
-      {
-        ++line_;
-        column_ = 1;
-      }
-    else
-      ++column_;
-    return c;
-  }
-  bool consume_token (std::string_view token)
-  {
-    if (input_.compare (pos_, token.size (), token) != 0)
-      return false;
-    // `->` must not match the prefix of `<->`... callers try `<->` first.
-    for (std::size_t i = 0; i < token.size (); ++i)
-      consume ();
-    return true;
-  }
-  [[noreturn]] void fail (const std::string &message) const
-  {
-    throw ParseError (line_, column_, message);
-  }
-
   std::string input_;
-  std::size_t pos_ = 0;
-  std::size_t line_ = 1;
-  std::size_t column_ = 1;
 };
 
 inline BoolFormula parse_bool_formula (const std::string &text)

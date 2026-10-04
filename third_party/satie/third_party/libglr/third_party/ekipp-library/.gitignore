@@ -1,0 +1,227 @@
+############################
+# General
+############################
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+############################
+# Build directories
+############################
+build/
+build-*/
+cmake-build-*/
+out/
+bin/
+lib/
+
+############################
+# CMake
+############################
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+*.cmake.user
+*.cmake.user.*
+
+############################
+# Make / Ninja
+############################
+Makefile
+.ninja_deps
+.ninja_log
+rules.ninja
+
+############################
+# Object files
+############################
+*.o
+*.obj
+*.lo
+*.slo
+*.ko
+*.elf
+
+############################
+# Binaries
+############################
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.so.*
+*.dylib
+*.a
+*.lib
+
+############################
+# Dependency files
+############################
+*.d
+*.dep
+
+############################
+# C++ Modules (IMPORTANT)
+############################
+
+# Clang / GCC
+*.pcm
+*.gcm
+*.ifc
+*.bmi
+*.module.json
+*.modmap
+
+# Module cache directories
+**/gcm.cache/
+**/pcm.cache/
+**/module.cache/
+**/.module_cache/
+**/CMakeModules/
+
+# MSVC modules
+*.ifc
+*.ifc.obj
+ipch/
+
+############################
+# Precompiled headers
+############################
+*.pch
+*.gch
+
+############################
+# Compiler / Toolchain caches
+############################
+.cache/
+ccache/
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+
+############################
+# IDEs and Editors
+############################
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+
+# Visual Studio
+.vs/
+*.sln
+*.vcxproj*
+*.user
+*.filters
+*.opendb
+*.db
+
+# CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+
+############################
+# Testing / Coverage
+############################
+coverage/
+lcov.info
+*.coverage
+
+############################
+# LaTeX (Comprehensive)
+############################
+
+# Core auxiliary files
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+
+# Bibliography
+*.bbl
+*.blg
+*.run.xml
+*-blx.bib
+
+# Latexmk
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+
+# Beamer
+*.nav
+*.snm
+*.vrb
+
+# TikZ / PGF
+*.pgf
+*.pgf-plot.gnuplot
+*.pgf-plot.table
+
+# Glossaries / Index
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.ist
+*.idx
+*.ind
+
+# Temporary PDFs (keep final ones manually)
+*.pdfsync
+
+############################
+# Archives / Packaging
+############################
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+############################
+# Custom local ignores
+############################
+.gitignore.local
+
+###########################
+# Third Party Libraries
+###########################
+third_party/*
+!third_party/.gitkeep
+
+AGENTS.md
+AGENT_PROCESS.md
+COMPLETION_REPORT.md
+REFACTORING_SUMMARY.md
+
+docs/html
+docs/latex
+docs/xml
+docs/docbook

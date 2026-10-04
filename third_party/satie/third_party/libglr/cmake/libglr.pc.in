@@ -1,0 +1,12 @@
+prefix=${pcfiledir}/@GLR_PC_PREFIX_RELATIVE@
+exec_prefix=${prefix}
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+
+Name: libglr
+Description: GLR parsing library for ambiguous context-free grammars
+Version: @PROJECT_VERSION@
+URL: @PROJECT_HOMEPAGE_URL@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lglr
+Libs.private: @GLR_PC_PRIVATE_LIBS@

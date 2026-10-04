@@ -11,6 +11,30 @@
 namespace satie::frontend
 {
 
+struct SExpression
+{
+  bool is_list = false;
+  std::string atom;
+  std::vector<SExpression> children;
+};
+
+struct BooleanSyntax
+{
+  enum class Kind { Var, True, False, Not, And, Or, Xor, Imp, Iff };
+  explicit BooleanSyntax (Kind k = Kind::False) : kind (k) {}
+  Kind kind;
+  std::string name;
+  std::vector<BooleanSyntax> children;
+};
+
+/// Shared libglr parsers. Syntax errors retain original source coordinates.
+/// Nesting is limited to 256 levels to bound AST traversal stack use.
+std::vector<SExpression> parse_sexpressions (const std::string &text,
+                                            std::size_t line_base = 1);
+SExpression parse_expression_tokens (const std::vector<std::string> &tokens,
+                                     std::size_t &position, std::size_t line);
+BooleanSyntax parse_boolean_syntax (const std::string &text);
+
 /// Shared types for the language frontends (`wcnf`/`opb`/`smt2`/ ...).
 /// Parsing errors reuse `satie::ParseError` with line/column positions.
 struct WeightedClause

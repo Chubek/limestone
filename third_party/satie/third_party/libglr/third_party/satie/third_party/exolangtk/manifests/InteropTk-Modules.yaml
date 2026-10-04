@@ -1,0 +1,189 @@
+# InteropTk-Modules.yaml
+# Manifest for the InteropTk ("Interoperability Toolkit") header-only libraries.
+# Scope: building-block headers under include/InteropTk that make C interop
+# easier when implementing compilers and interpreters.
+# NOTE: The FFI layer under include/FFItk is documented separately in
+# FFItk-Modules.yaml (next post).
+
+manifest:
+  name: InteropTk
+  full-name: Interoperability Toolkit
+  version: 0.1.0
+  language: C99
+  distribution: header-only
+  include-root: include/InteropTk
+  namespace-prefix: itk_
+  license: MIT
+  description: >
+    A collection of C99 header-only libraries providing the building blocks
+    for C interoperability in compilers and interpreters: platform/ABI
+    introspection, a canonical C type model, record layout computation,
+    symbol decoration, value marshalling, and ownership-aware bridging of
+    strings, errors, and allocators.
+  companion-manifests:
+    - file: FFItk-Modules.yaml
+      include-root: include/FFItk
+      status: documented-separately
+
+modules:
+
+  - name: platform
+    header: include/InteropTk/itk_platform.h
+    summary: >
+      Compile-time detection of target OS, architecture, endianness, data
+      model (LP64/LLP64/ILP32), and toolchain. Everything downstream keys
+      off the macros and enums defined here.
+    provides:
+      - ITK_OS_*, ITK_ARCH_*, ITK_ABI_* detection macros
+      - ITK_DEF function qualifier macro (user-overridable)
+      - itk_target_info struct and itk_target_query()
+      - itk_bool typedef and ITK_TRUE / ITK_FALSE constants
+    depends-on: []
+    stability: stable
+
+  - name: ctypes
+    header: include/InteropTk/itk_ctypes.h
+    summary: >
+      Canonical model of the C type system: primitive kinds, size, alignment,
+      signedness, qualifiers, pointers, arrays, functions. Gives compiler and
+      interpreter authors one authoritative table instead of scattered
+      sizeof() assumptions.
+    provides:
+      - itk_type descriptor and itk_type_kind enum
+      - itk_type_size(), itk_type_align(), itk_type_equal()
+      - builders for pointer, array, and function types
+      - itk_type_prim(), itk_type_is_* classification helpers
+      - itk_type_kind_name() and itk_char_is_signed()
+      - ITK_QUAL_* type-qualifier bit constants
+    depends-on: [platform]
+    stability: stable
+
+  - name: layout
+    header: include/InteropTk/itk_layout.h
+    summary: >
+      Struct, union, and bitfield layout computation matching the target ABI:
+      field offsets, padding, tail padding, and overall size/alignment.
+      Essential when a managed language must mirror C records byte-for-byte.
+    provides:
+      - itk_record_builder API
+      - itk_field_offset(), itk_record_size(), itk_record_align()
+      - bitfield allocation rules per target ABI
+      - itk_record_kind / itk_abi_kind enums, itk_layout_default_abi()
+      - itk_record_field(), itk_record_bitfield() adders
+      - itk_field_bitfield_info() bitfield accessor
+    depends-on: [platform, ctypes]
+    stability: stable
+
+  - name: callconv
+    header: include/InteropTk/itk_callconv.h
+    summary: >
+      Declarative metadata for calling conventions (SysV, Win64, AAPCS, ...):
+      argument classification, register vs. stack passing, return-value
+      conventions, and struct-by-value rules. Metadata only; actual foreign
+      calls live in FFItk.
+    provides:
+      - itk_callconv enum and itk_arg_class classification
+      - itk_classify_args(), itk_classify_return()
+    depends-on: [platform, ctypes, layout]
+    stability: experimental
+
+  - name: mangle
+    header: include/InteropTk/itk_mangle.h
+    summary: >
+      Symbol name decoration and demangling helpers for linking against C
+      toolchains: leading-underscore conventions, stdcall suffixes, and
+      section/visibility naming quirks per platform.
+    provides:
+      - itk_mangle_c_symbol(), itk_demangle_c_symbol()
+      - itk_symbol_visibility helpers
+    depends-on: [platform]
+    stability: stable
+
+  - name: cdecl
+    header: include/InteropTk/itk_cdecl.h
+    summary: >
+      A minimal, dependency-free parser for C declaration snippets
+      ("int (*)(const char *, size_t)") producing itk_type values. Lets
+      interpreters accept C signatures as strings without a full C frontend.
+    provides:
+      - itk_cdecl_parse(), itk_cdecl_format()
+      - diagnostic reporting via itk_cdecl_error
+      - itk_cdecl parse context with type/param arenas
+      - itk_cdecl_type()/itk_cdecl_name() result accessors
+      - ITK_CDECL_MAX_* capacity macro constants
+    depends-on: [ctypes]
+    stability: experimental
+
+  - name: marshal
+    header: include/InteropTk/itk_marshal.h
+    summary: >
+      Value marshalling primitives between a host language's representation
+      and raw C memory: bounds-checked scalar reads/writes, aggregate
+      copy-in/copy-out, and endian-aware accessors driven by itk_type
+      descriptors.
+    provides:
+      - itk_read_scalar(), itk_write_scalar()
+      - itk_marshal_record(), itk_unmarshal_record()
+      - itk_scalar value carrier union (u/s/d/ld views)
+      - itk_read_scalar_le/be, itk_write_scalar_le/be endian accessors
+      - itk_record_read_field()/itk_record_write_field() incl. bitfields
+    depends-on: [ctypes, layout]
+    stability: stable
+
+  - name: cstring
+    header: include/InteropTk/itk_cstring.h
+    summary: >
+      Ownership-aware bridging of strings across the boundary: borrowed vs.
+      owned views, NUL-termination guarantees, length-prefixed conversion,
+      and UTF-8 validation for hosts with non-C string representations.
+    provides:
+      - itk_str_view (borrowed) and itk_str_buf (owned)
+      - itk_str_from_c(), itk_str_to_c(), itk_utf8_validate()
+      - itk_str_view_equals(), itk_str_view_index() helpers
+      - itk_str_buf_init/free/reserve/append family
+      - itk_utf8_status diagnostic enum with error offsets
+    depends-on: [platform, alloc]
+    stability: stable
+
+  - name: error
+    header: include/InteropTk/itk_error.h
+    summary: >
+      Uniform bridging of C error channels (errno, return codes, GetLastError)
+      into a single itk_status type that a host runtime can translate into
+      its own exception or result mechanism.
+    provides:
+      - itk_status struct with domain/code/message
+      - ITK_DOMAIN_* domain constants and ITK_STATUS_MESSAGE_MAX
+      - itk_status_code enum (ITK_EINVAL ... ITK_ETRUNC, ITK_EFAIL)
+      - itk_status_ok(), itk_status_is_ok(), itk_status_set()
+      - itk_status_from_errno(), itk_status_from_lasterror()
+      - itk_status_from_os() raw code mapping
+    depends-on: [platform]
+    stability: stable
+
+  - name: alloc
+    header: include/InteropTk/itk_alloc.h
+    summary: >
+      Allocator bridging: a small vtable (alloc/realloc/free with context
+      pointer) so C code can allocate through the host runtime's allocator
+      or GC-pinned heap, plus an arena built on top for transient interop
+      buffers.
+    provides:
+      - itk_allocator vtable and default libc adapter
+      - itk_allocator_alloc/realloc/free/zalloc call helpers
+      - itk_arena with itk_arena_init/push/reset/destroy
+      - ITK_ARENA_BLOCK_SIZE default block-size macro constant
+    depends-on: [platform]
+    stability: stable
+
+  - name: export
+    header: include/InteropTk/itk_export.h
+    summary: >
+      Boilerplate macros for producing C-consumable APIs from a compiler's
+      generated code: ITK_EXPORT/ITK_IMPORT visibility, ITK_EXTERN_C guards,
+      ITK_API versioned symbol annotations, and static-assert shims for C99.
+    provides:
+      - ITK_EXPORT, ITK_IMPORT, ITK_EXTERN_C_BEGIN/END
+      - ITK_STATIC_ASSERT for C99 targets
+    depends-on: [platform]
+    stability: stable

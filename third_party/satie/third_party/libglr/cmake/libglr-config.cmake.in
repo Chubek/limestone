@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+if(@HAVE_LMDB@)
+    find_dependency(OpenSSL)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/libglr-targets.cmake")

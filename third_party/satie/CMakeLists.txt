@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(Satie
   VERSION 0.1.0
   LANGUAGES C CXX
-  DESCRIPTION "Small, header-only, multi-algorithm SAT solver")
+  DESCRIPTION "Multi-algorithm SAT/SMT solver")
 
 # ------------------------------------------------------------
 # Global settings
@@ -51,6 +51,7 @@ target_include_directories(satie
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_compile_features(satie PUBLIC cxx_std_20)
+include(SatieBackends)
 target_compile_options(satie PRIVATE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wextra -Wpedantic>)
 

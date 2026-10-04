@@ -1,0 +1,8 @@
+#ifndef GLR_CONFIG_H
+#define GLR_CONFIG_H
+
+/* Define to 1 if libmdbx is available for incremental parsing cache */
+#cmakedefine HAVE_LMDB @HAVE_LMDB@
+#cmakedefine HAVE_LIBMDBX @HAVE_LIBMDBX@
+
+#endif /* GLR_CONFIG_H */

@@ -61,22 +61,11 @@ inline bool clause_subsumes (const Clause &a, const Clause &b)
 {
   if (a.size () > b.size ())
     return false;
-  if (a.empty ())
-    return false;
-  std::size_t i = 0, j = 0;
-  while (i < a.size () && j < b.size ())
-    {
-      if (a[i] == b[j])
-        {
-          ++i;
-          ++j;
-        }
-      else if (a[i] < b[j])
-        ++j;
-      else
-        ++i;
-    }
-  return i == a.size ();
+  // CNF normalization orders by absolute variable, not signed value.
+  for (Lit lit : a)
+    if (std::find (b.begin (), b.end (), lit) == b.end ())
+      return false;
+  return true;
 }
 
 inline std::size_t count_positive_literals (const Clause &clause)
@@ -229,7 +218,9 @@ public:
   Assignment completed (bool value = true) const
   {
     Assignment out = *this;
-    out.assign_all (value);
+    for (std::size_t i = first_variable; i <= out.size (); ++i)
+      if (!out.is_assigned (static_cast<Var> (i)))
+        out.assign (static_cast<Var> (i), value);
     return out;
   }
 
@@ -345,7 +336,9 @@ public:
   /// subsumed clauses.  Never changes satisfiability.
   CNF simplified () const
   {
-    return CNF (deduplicated (clauses_without_tautologies ()));
+    CNF out (deduplicated (clauses_without_tautologies ()));
+    out.set_declared_variable_count (variable_count_);
+    return out;
   }
 
   void normalize ()
@@ -386,6 +379,7 @@ public:
   /// Disjoint union: `CNF` is a conjunction, so `&` concatenates clauses.
   friend CNF operator& (CNF lhs, const CNF &rhs)
   {
+    lhs.set_declared_variable_count (std::max (lhs.variable_count (), rhs.variable_count ()));
     for (const Clause &clause : rhs.clauses_)
       lhs.add_clause (clause);
     return lhs;
@@ -417,6 +411,9 @@ public:
 private:
   static void normalize_clause (Clause &clause)
   {
+    for (Lit lit : clause)
+      if (lit == std::numeric_limits<Lit>::min ())
+        throw std::invalid_argument ("literal magnitude exceeds variable range");
     clause.erase (std::remove (clause.begin (), clause.end (), 0), clause.end ());
     std::sort (clause.begin (), clause.end (), [] (Lit a, Lit b) {
       Var av = literal_var (a), bv = literal_var (b);
@@ -533,72 +530,7 @@ public:
   /// marker (SATLIB convention), and CRLF line endings are accepted.  The
   /// problem line is optional, but when present the declared variable and
   /// clause counts are enforced.
-  CNF parse ()
-  {
-    std::string line;
-    std::size_t line_no = 0;
-    std::optional<std::size_t> declared_vars;
-    std::optional<std::size_t> declared_clauses;
-    ClauseList clauses;
-    Clause current;
-
-    while (std::getline (input_, line))
-      {
-        ++line_no;
-        std::size_t first = first_non_ws (line);
-        if (first == std::string::npos || line[first] == 'c')
-          continue;
-        if (line[first] == '%')
-          break;
-        if (line[first] == 'p')
-          {
-            if (declared_vars)
-              throw ParseError (line_no, first + 1, "duplicate problem line");
-            std::stringstream ss (line.substr (first));
-            std::string p, kind;
-            std::size_t vars = 0, cls = 0;
-            if (!(ss >> p >> kind >> vars >> cls) || p != "p" || kind != "cnf")
-              throw ParseError (line_no, first + 1, "expected 'p cnf <vars> <clauses>'");
-            declared_vars = vars;
-            declared_clauses = cls;
-            continue;
-          }
-
-        std::stringstream ss (line.substr (first));
-        long long raw = 0;
-        bool saw = false;
-        while (ss >> raw)
-          {
-            saw = true;
-            if (raw < std::numeric_limits<Lit>::min () || raw > std::numeric_limits<Lit>::max ())
-              throw ParseError (line_no, first + 1, "literal exceeds int32 range");
-            Lit lit = static_cast<Lit> (raw);
-            if (lit == 0)
-              {
-                clauses.push_back (std::move (current));
-                current.clear ();
-              }
-            else
-              {
-                if (declared_vars && static_cast<std::size_t> (literal_var (lit)) > *declared_vars)
-                  throw ParseError (line_no, first + 1, "literal exceeds declared variable count");
-                current.push_back (lit);
-              }
-          }
-        if (!saw)
-          throw ParseError (line_no, first + 1, "expected literal or comment");
-      }
-
-    if (!current.empty ())
-      throw ParseError (line_no, 1, "unterminated clause; missing 0");
-    if (declared_clauses && clauses.size () != *declared_clauses)
-      throw ParseError (line_no, 1, "clause count does not match problem line");
-
-    CNF cnf (std::move (clauses));
-    if (declared_vars)
-      cnf.set_declared_variable_count (*declared_vars);
-    return cnf;
-  }
+  CNF parse ();
 
 private:
   static std::size_t first_non_ws (const std::string &line)
