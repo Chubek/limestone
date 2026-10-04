@@ -55,6 +55,20 @@ int main(){return test_main([]{
     }
     CHECK(take(unisel::solve(p,ps)).cost==best);
   }
+  // Multi-bit weights exercise the pseudo-Boolean cost-bound encoder, and
+  // repeated solves must agree exactly (lexicographic optimum fixing).
+  for(int constant_cost:{0,5,100})for(int fused_cost:{0,7,200}) {
+    auto ps=patterns;ps[0].cost=constant_cost;ps[1].cost=17;ps[2].cost=fused_cost;
+    auto candidates=unisel::match(p,ps);int best=1000000;
+    for(unsigned mask=0;mask<(1u<<candidates.size());++mask) {
+      std::map<uint32_t,unsigned> coverage;int cost=0;
+      for(size_t i=0;i<candidates.size();++i)if(mask&(1u<<i)){cost+=candidates[i].cost;for(auto id:candidates[i].covered)++coverage[id];}
+      if(coverage[1]==1&&coverage[2]==1&&coverage[3]==1)best=std::min(best,cost);
+    }
+    auto once=take(unisel::solve(p,ps));CHECK(once.cost==best);
+    auto twice=take(unisel::solve(p,ps));CHECK(twice.cost==best&&twice.selected.size()==once.selected.size());
+    for(size_t i=0;i<once.selected.size();++i)CHECK(twice.selected[i].pattern==once.selected[i].pattern&&twice.selected[i].root==once.selected[i].root&&twice.selected[i].covered==once.selected[i].covered);
+  }
   limeburg::RuleSet rules{{{1,"reg","const","reg",{},4,"CONST",0},{2,"imm","const","imm",{},0,"",0},{3,"reg","add","reg",{"reg","imm"},1,"ADDI",0},{4,"reg","add","reg",{"reg","reg"},1,"ADD",0}},{{"reg",1},{"imm",2}}};
   rules.rules[1].immediate=std::pair<int64_t,int64_t>{-8,7};
   std::vector<limeburg::Node> tree{{1,"add","i64",{20,10}},{20,"const","i64",{},100,true},{10,"const","i64",{},7,true}};

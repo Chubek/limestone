@@ -67,7 +67,7 @@ void header(std::vector<uint8_t>& bytes,uint64_t offset,const SectionHeader& sec
   put(bytes,offset+16+4*width,section.alignment,width,order);put(bytes,offset+16+5*width,section.entry_size,width,order);
 }
 void limits(const ObjectFile& f,const ObjectLimits& l) {
-  if(f.sections.size()>l.sections||f.symbols.size()>l.symbols||f.relocations.size()>l.relocations)fail("object count limit exceeded",Code::ResourceLimit);
+  if(f.sections.size()>l.sections||f.symbols.size()>l.symbols||f.relocations.size()>l.relocations||f.groups.size()>l.groups)fail("object count limit exceeded",Code::ResourceLimit);
   uint64_t size=0;for(auto& s:f.sections)size=add(size,add(s.size(),s.name.size()));for(auto& s:f.symbols)size=add(size,s.name.size());if(size>l.bytes)fail("object expanded byte limit exceeded",Code::ResourceLimit);
   if(f.sections.size()>=0xff00||f.symbols.size()>=UINT32_MAX)fail("object index limit exceeded",Code::ResourceLimit);
 }
@@ -97,6 +97,16 @@ void check(const ObjectFile& f,const ObjectLimits& l) {
     if(r.implicit_addend&&r.addend)fail("REL relocation cannot carry an explicit addend");
     if(narrow&&(r.type>UINT8_MAX||r.offset>UINT32_MAX||r.addend<INT32_MIN||r.addend>INT32_MAX))fail("ELF32 relocation field exceeds its encoding range");
   }
+  std::set<std::pair<uint32_t,ObjectGroupMember::Kind>> members;
+  for(auto& group:f.groups){
+    if(group.signature>=f.symbols.size()||f.symbols[group.signature].name.empty()||group.flags>1||group.members.empty()||group.name.empty()||group.name.find('\0')!=std::string::npos)fail("invalid ELF section group/signature");
+    std::set<uint32_t> content;for(auto& member:group.members)if(member.kind==ObjectGroupMember::Kind::Content)content.insert(member.section);
+    for(auto& member:group.members){if(member.section>=f.sections.size()||member.kind<ObjectGroupMember::Kind::Content||member.kind>ObjectGroupMember::Kind::REL||!members.emplace(member.section,member.kind).second)fail("invalid/duplicate ELF group member");
+      if(member.kind==ObjectGroupMember::Kind::Content){if(!(f.sections[member.section].flags&512))fail("ELF group member lacks SHF_GROUP");}
+      else {if(!content.contains(member.section))fail("grouped relocation needs its content in the same group",Code::Unsupported);bool implicit=member.kind==ObjectGroupMember::Kind::REL;if(std::none_of(f.relocations.begin(),f.relocations.end(),[&](auto& r){return r.section==member.section&&r.implicit_addend==implicit;}))fail("ELF group references a missing relocation section");}
+    }
+  }
+  for(uint32_t k=0;k<f.sections.size();++k)if(bool(f.sections[k].flags&512)!=members.contains({k,ObjectGroupMember::Kind::Content}))fail("ELF SHF_GROUP membership is inconsistent");
 }
 const Value& required(const Fields& fields,const std::string& key) {
   auto it=fields.find(key);if(it==fields.end())fail("missing object target field: "+key);return it->second;
@@ -145,11 +155,18 @@ Result<int> validate(const ObjectTarget& target) {
     format(target.format);if(!aligned(target.text_alignment))fail("invalid object text alignment");std::set<std::string> names;
     if(target.format.elf_class==ElfClass::Elf32&&target.text_alignment>UINT32_MAX)fail("ELF32 text alignment exceeds 32 bits");
     std::set<uint32_t> sections;for(auto type:target.opaque_section_types)if(!opaque_section(type)||!sections.insert(type).second)fail("invalid/duplicate opaque object section type");
+    if(target.got&&(target.got->entry_bytes<1||target.got->entry_bytes>8||!aligned(target.got->alignment)))fail("invalid GOT entry layout");
+    if(target.plt&&(target.plt->adapter.empty()||!target.plt->entry_bytes||target.plt->entry_bytes>1048576||!aligned(target.plt->alignment)||!target.got))fail("invalid PLT contract or missing GOT layout");
     for(auto& [id,t]:target.relocations) {
       if(target.format.elf_class==ElfClass::Elf32&&id>UINT8_MAX)fail("ELF32 relocation type exceeds 8 bits");
-      if(id!=t.type||t.name.empty()||!names.insert(t.name).second||t.storage_bytes<1||t.storage_bytes>8||t.bits<1||t.bits>64||t.bit_offset>64-t.bits||t.bit_offset+t.bits>8*t.storage_bytes||!t.scale)fail("invalid object relocation encoding");
-      if(t.kind!=RelocationKind::Absolute&&t.kind!=RelocationKind::PCRelative)fail("unknown object relocation kind");
-      if(t.kind==RelocationKind::Absolute&&t.pc_bias)fail("absolute relocation cannot have a PC bias");
+      if(id!=t.type||t.name.empty()||!names.insert(t.name).second)fail("invalid object relocation identity");
+      if(t.kind<RelocationKind::Absolute||t.kind>RelocationKind::Custom)fail("unknown object relocation kind");
+      if(t.kind==RelocationKind::Custom){if(t.adapter.empty()||!t.storage_bytes||t.storage_bytes>1048576)fail("custom relocation needs an adapter and bounded storage window");continue;}
+      if(!t.adapter.empty()||t.storage_bytes<1||t.storage_bytes>8||t.bits<1||t.bits>64||t.bit_offset>64-t.bits||t.bit_offset+t.bits>8*t.storage_bytes||!t.scale)fail("invalid object relocation encoding");
+      if(t.kind!=RelocationKind::PCRelative&&t.kind!=RelocationKind::GOTPCRelative&&t.kind!=RelocationKind::PLTPCRelative&&t.pc_bias)fail("non-PC-relative relocation cannot have a PC bias");
+      if(t.kind>=RelocationKind::GOTAbsolute&&t.kind<=RelocationKind::PLTPCRelative&&!target.got)fail("GOT/PLT relocation requires a GOT contract");
+      if(t.kind==RelocationKind::PLTPCRelative&&!target.plt)fail("PLT relocation requires a PLT contract");
+      if((t.kind==RelocationKind::TLSOffset||t.kind==RelocationKind::TLSModule)&&!target.tls)fail("TLS relocation requires an explicit TLS contract");
     }return Result<int>::ok(0);
   }catch(const Error& e){return Result<int>::err(e);}
 }
@@ -157,16 +174,21 @@ Result<ObjectTarget> object_target(const metacode::Architecture& architecture) {
   try {
     auto it=architecture.fields.find("tooling");if(it==architecture.fields.end())fail("missing tooling.object_file contract",Code::Unsupported);
     auto& tooling=object(it->second);it=tooling.find("object_file");if(it==tooling.end())fail("missing tooling.object_file contract",Code::Unsupported);
-    auto& f=object(it->second);known(f,{"format","version","machine","endianness","flags","osabi","abi_version","text_alignment","relocations","opaque_section_types"});
+    auto& f=object(it->second);known(f,{"format","version","machine","endianness","flags","osabi","abi_version","text_alignment","relocations","opaque_section_types","got","plt","tls"});
     auto container=text(f,"format");if((container!="elf32"&&container!="elf64")||number(f,"version")!=1)fail("unsupported object-file format/version",Code::Unsupported);
     ObjectTarget target;target.architecture=architecture.name;auto& out=target.format;out.machine=uint16_t(number(f,"machine",UINT16_MAX));out.flags=uint32_t(number(f,"flags",UINT32_MAX));out.osabi=uint8_t(number(f,"osabi",UINT8_MAX));out.abi_version=uint8_t(number(f,"abi_version",UINT8_MAX));
     out.elf_class=container=="elf32"?ElfClass::Elf32:ElfClass::Elf64;
     auto endian=text(f,"endianness");if(endian!="little"&&endian!="big")fail("invalid ELF byte order");out.byte_order=endian=="little"?ByteOrder::Little:ByteOrder::Big;target.text_alignment=number(f,"text_alignment");
     if(auto extra=f.find("opaque_section_types");extra!=f.end()){auto types=std::get_if<Value::Array>(&extra->second.data);if(!types)fail("opaque section types must be an array");for(auto& entry:*types){auto n=number(entry);if(n>UINT32_MAX)fail("opaque section type exceeds 32 bits");target.opaque_section_types.push_back(uint32_t(n));}}
+    if(auto extra=f.find("got");extra!=f.end()){auto& fields=object(extra->second);known(fields,{"entry_bytes","alignment"});target.got=GOTContract{uint32_t(number(fields,"entry_bytes",8)),number(fields,"alignment")};}
+    if(auto extra=f.find("plt");extra!=f.end()){auto& fields=object(extra->second);known(fields,{"adapter","entry_bytes","alignment"});target.plt=PLTContract{text(fields,"adapter"),uint32_t(number(fields,"entry_bytes",1048576)),number(fields,"alignment")};}
+    if(auto extra=f.find("tls");extra!=f.end()){auto value=std::get_if<bool>(&extra->second.data);if(!value)fail("object TLS contract must be Boolean");target.tls=*value;}
     auto entries=std::get_if<Value::Array>(&required(f,"relocations").data);if(!entries)fail("object relocation encodings must be an array");
     for(auto& entry:*entries) {
-      auto& fields=object(entry);known(fields,{"type","name","kind","storage_bytes","bit_offset","bits","scale","signed","pc_bias","implicit_addend_signed"});RelocationType t;
-      t.type=uint32_t(number(fields,"type",UINT32_MAX));t.name=text(fields,"name");auto kind=text(fields,"kind");if(kind!="absolute"&&kind!="pc_relative")fail("unsupported object relocation expression: "+kind,Code::Unsupported);t.kind=kind=="absolute"?RelocationKind::Absolute:RelocationKind::PCRelative;
+      auto& fields=object(entry);known(fields,{"type","name","kind","storage_bytes","bit_offset","bits","scale","signed","pc_bias","implicit_addend_signed","adapter"});RelocationType t;
+      t.type=uint32_t(number(fields,"type",UINT32_MAX));t.name=text(fields,"name");auto kind=text(fields,"kind");const std::map<std::string,RelocationKind> kinds{{"absolute",RelocationKind::Absolute},{"pc_relative",RelocationKind::PCRelative},{"got_absolute",RelocationKind::GOTAbsolute},{"got_pc_relative",RelocationKind::GOTPCRelative},{"got_base_relative",RelocationKind::GOTBaseRelative},{"plt_pc_relative",RelocationKind::PLTPCRelative},{"tls_offset",RelocationKind::TLSOffset},{"tls_module",RelocationKind::TLSModule},{"custom",RelocationKind::Custom}};
+      if(!kinds.contains(kind))fail("unsupported object relocation expression: "+kind,Code::Unsupported);t.kind=kinds.at(kind);
+      if(t.kind==RelocationKind::Custom){t.storage_bytes=uint32_t(number(fields,"storage_bytes",1048576));t.adapter=text(fields,"adapter");if(!target.relocations.emplace(t.type,std::move(t)).second)fail("duplicate object relocation type",Code::Conflict);continue;}
       t.storage_bytes=uint32_t(number(fields,"storage_bytes",8));t.bit_offset=uint32_t(number(fields,"bit_offset",63));t.bits=uint32_t(number(fields,"bits",64));t.scale=number(fields,"scale");auto sign=std::get_if<bool>(&required(fields,"signed").data);if(!sign)fail("object relocation signed must be Boolean");t.signed_value=*sign;
       if(auto implicit=fields.find("implicit_addend_signed");implicit!=fields.end()){auto value=std::get_if<bool>(&implicit->second.data);if(!value)fail("REL addend signedness must be Boolean");t.implicit_addend_signed=*value;}
       if(auto bias=fields.find("pc_bias");bias!=fields.end()){auto value=std::get_if<int64_t>(&bias->second.data);if(value)t.pc_bias=*value;else {auto n=number(bias->second);if(n>INT64_MAX)fail("object PC bias exceeds signed range");t.pc_bias=int64_t(n);}}
@@ -190,7 +212,7 @@ Result<ObjectFile> load_elf(std::span<const uint8_t> bytes,std::string_view sour
     if(r.number(24,layout.word)||r.number(24+layout.word,layout.word)||r.number(layout.sizes_offset+2,2)||r.number(layout.sizes_offset+4,2))fail("relocatable ELF has an entry point or program headers",Code::Unsupported);
     auto table=r.number(layout.table_offset,layout.word),count=r.number(layout.sizes_offset+8,2),strings=r.number(layout.sizes_offset+10,2);
     if(!count||count>=0xff00||strings==0xffff)fail("extended ELF section indexes require an adapter",Code::Unsupported);
-    if(count>add(add(l.sections,4),l.relocations))fail("ELF section count limit exceeded",Code::ResourceLimit);
+    if(count>add(add(add(l.sections,4),l.relocations),l.groups))fail("ELF section count limit exceeded",Code::ResourceLimit);
     if(r.number(layout.sizes_offset+6,2)!=layout.section_header||table<layout.file_header||table%layout.word||strings>=count||!strings)fail("invalid ELF section table",Code::Parse);r.span(table,count*layout.section_header);
     if(std::any_of(bytes.begin()+9,bytes.begin()+16,[](auto n){return n!=0;}))fail("unsupported ELF identification padding",Code::Unsupported);
     ObjectFile file;file.source=source;file.format={uint16_t(r.number(18,2)),r.order,uint32_t(r.number(layout.flags_offset,4)),bytes[7],bytes[8],elf_class};
@@ -209,7 +231,8 @@ Result<ObjectFile> load_elf(std::span<const uint8_t> bytes,std::string_view sour
       if(h.type!=8){r.span(h.offset,h.size);if(h.size&&h.offset<layout.file_header)fail("ELF section overlaps header",Code::Parse);}
       if(h.type==2){if(symbols)fail("multiple ELF symbol tables require an adapter",Code::Unsupported);if(h.flags)fail("allocated/flagged ELF symbol table",Code::Unsupported);symbols=k;continue;}
       if(h.type==3){if(h.flags||h.link||h.info||h.entry_size)fail("unsupported ELF string-table metadata",Code::Unsupported);continue;}
-      if(h.type==4||h.type==9){if(h.flags&~uint64_t{64})fail("unsupported ELF relocation metadata",Code::Unsupported);continue;}
+      if(h.type==4||h.type==9){if(h.flags&~uint64_t{64|512})fail("unsupported ELF relocation metadata",Code::Unsupported);continue;}
+      if(h.type==17)continue;
       if(h.type!=1&&h.type!=7&&h.type!=8&&!opaque_section(h.type))fail("unsupported ELF section type: "+std::to_string(h.type),Code::Unsupported);
       if(h.link||h.info)fail("linked ELF section metadata requires an adapter",Code::Unsupported);
       if(file.sections.size()>=l.sections)fail("ELF content section count limit exceeded",Code::ResourceLimit);
@@ -248,6 +271,17 @@ Result<ObjectFile> load_elf(std::span<const uint8_t> bytes,std::string_view sour
         file.relocations.push_back({*section_ids[h.info],*symbol_ids[symbol],uint32_t(info&(layout.narrow?UINT8_MAX:UINT32_MAX)),offset,addend,implicit});
       }
     }
+    std::set<uint32_t> grouped;
+    for(size_t k=1;k<count;++k)if(sections[k].type==17){auto& h=sections[k];
+      if(file.groups.size()>=l.groups)fail("ELF group count limit exceeded",Code::ResourceLimit);
+      if(!symbols||h.link!=*symbols||h.info>=symbol_ids.size()||!symbol_ids[h.info]||h.entry_size!=4||h.size<8||h.size%4||h.flags)fail("invalid ELF group header",Code::Parse);
+      ObjectGroup group;group.signature=*symbol_ids[h.info];group.flags=uint32_t(r.number(h.offset,4));group.name=name(str,h.name);
+      for(uint64_t n=4;n<h.size;n+=4){auto member=uint32_t(r.number(h.offset+n,4));if(!member||member>=count||!grouped.insert(member).second||!(sections[member].flags&512))fail("invalid/duplicate ELF group member",Code::Parse);
+        auto kind=sections[member].type;if(kind==4||kind==9){auto target=sections[member].info;if(target>=count||!section_ids[target])fail("ELF group relocation has no content",Code::Parse);group.members.push_back({kind==4?ObjectGroupMember::Kind::RELA:ObjectGroupMember::Kind::REL,*section_ids[target]});}
+        else {if(!section_ids[member])fail("ELF group references unsupported section",Code::Unsupported);group.members.push_back({ObjectGroupMember::Kind::Content,*section_ids[member]});}}
+      file.groups.push_back(std::move(group));
+    }
+    for(uint32_t k=1;k<count;++k)if(bool(sections[k].flags&512)!=grouped.contains(k))fail("inconsistent ELF group membership",Code::Parse);
     check(file,l);return Result<ObjectFile>::ok(std::move(file));
   }catch(const Error& e){return Result<ObjectFile>::err({e.code,(source.empty()?"":std::string(source)+": ")+e.message});}
 }
@@ -270,6 +304,7 @@ Result<std::vector<uint8_t>> emit_elf(const ObjectFile& file,const ObjectLimits&
     sections.push_back({".symtab",{0,2,strtab,first,0,0,0,symbytes.size(),layout.word,layout.symbol},std::move(symbytes)});
     sections.push_back({".strtab",{0,3,0,0,0,0,0,names.size(),1,0},std::move(names)});
     std::map<std::pair<uint32_t,bool>,std::vector<const ObjectRelocation*>> groups;
+    std::map<std::pair<uint32_t,bool>,uint32_t> relocation_sections;
     for(auto& relocation:file.relocations)groups[{relocation.section,relocation.implicit_addend}].push_back(&relocation);
     for(auto& [key,rels]:groups) {
       auto [section,implicit]=key;auto entry_size=layout.relocation(implicit);
@@ -278,7 +313,11 @@ Result<std::vector<uint8_t>> emit_elf(const ObjectFile& file,const ObjectLimits&
         put(data,offset,relocation.offset,layout.word,order);put(data,offset+layout.word,(uint64_t(ids[relocation.symbol])<<(layout.narrow?8:32))|relocation.type,layout.word,order);
         if(!implicit)put(data,offset+2*layout.word,layout.narrow?uint32_t(relocation.addend):std::bit_cast<uint64_t>(relocation.addend),layout.word,order);
       }
-      sections.push_back({std::string(implicit?".rel":".rela")+file.sections[section].name,{0,implicit?9u:4u,symtab,section+1,0,0,0,data.size(),layout.word,entry_size},std::move(data)});
+      relocation_sections[key]=uint32_t(sections.size());sections.push_back({std::string(implicit?".rel":".rela")+file.sections[section].name,{0,implicit?9u:4u,symtab,section+1,0,0,0,data.size(),layout.word,entry_size},std::move(data)});
+    }
+    for(auto& group:file.groups){std::vector<uint8_t> data(4*(group.members.size()+1));put(data,0,group.flags,4,order);size_t k=1;
+      for(auto& member:group.members){uint32_t index=member.kind==ObjectGroupMember::Kind::Content?member.section+1:relocation_sections.at({member.section,member.kind==ObjectGroupMember::Kind::REL});sections[index].header.flags|=512;put(data,k++*4,index,4,order);}
+      sections.push_back({group.name,{0,17,symtab,ids[group.signature],0,0,0,data.size(),4,4},std::move(data)});
     }
     auto strings=uint32_t(sections.size());sections.push_back({".shstrtab",{0,3,0,0,0,0,0,0,1,0},{}});
     if(sections.size()>=0xff00)fail("ELF section count exceeds direct index range",Code::ResourceLimit);
@@ -313,28 +352,43 @@ Result<LinkedImage> link_objects(std::span<const ObjectFile> files,const ObjectT
 }
 Result<LinkedImage> link_objects(std::span<const ObjectFile* const> files,const ObjectTarget& target,const LinkOptions& options) {
   try {
-    auto valid=validate(target);if(!valid)throw valid.error();if(files.empty())fail("link needs at least one object");if(files.size()>16384)fail("link object count limit exceeded",Code::ResourceLimit);
-    if(options.externals.size()>ObjectLimits{}.symbols)fail("link external symbol count limit exceeded",Code::ResourceLimit);
-    for(auto& [name,address]:options.externals)if(name.empty()||name.find('\0')!=std::string::npos)fail("invalid external object symbol name");
-    LinkedImage image;image.base_address=options.base_address;uint64_t cursor=options.base_address;
+    auto contract=target;auto config=options;auto valid=validate(contract);if(!valid)throw valid.error();if(files.empty())fail("link needs at least one object");if(files.size()>16384)fail("link object count limit exceeded",Code::ResourceLimit);
+    auto work=[&](size_t count=1){if(count>config.work_limit)fail("link work limit exceeded",Code::ResourceLimit);config.work_limit-=count;};
+    if(config.externals.size()>ObjectLimits{}.symbols)fail("link external symbol count limit exceeded",Code::ResourceLimit);
+    for(auto& [name,address]:config.externals)if(name.empty()||name.find('\0')!=std::string::npos)fail("invalid external object symbol name");
+    uint64_t section_count=0,symbol_count=0,relocation_count=0,input_bytes=0,group_count=0;
+    for(auto file:files){work();if(!file)fail("null link object");check(*file,{});if(file->format!=contract.format)fail("incompatible ELF object target: "+file->source,Code::Conflict);
+      section_count=add(section_count,file->sections.size());symbol_count=add(symbol_count,file->symbols.size());relocation_count=add(relocation_count,file->relocations.size());group_count=add(group_count,file->groups.size());
+      for(auto& section:file->sections)input_bytes=add(input_bytes,add(section.size(),section.name.size()));for(auto& symbol:file->symbols)input_bytes=add(input_bytes,symbol.name.size());
+      if(section_count>ObjectLimits{}.sections||symbol_count>ObjectLimits{}.symbols||relocation_count>ObjectLimits{}.relocations||group_count>ObjectLimits{}.groups||input_bytes>config.input_limit)fail("aggregate link input limit exceeded",Code::ResourceLimit);
+    }
+    // Callbacks may release or edit every source handle; active calls use owning
+    // snapshots, including target contracts and callback/provider ownership.
+    std::vector<ObjectFile> snapshots;std::vector<const ObjectFile*> views;
+    if(config.resolve_dynamic||config.plt||!config.relocation_adapters.empty()){snapshots.reserve(files.size());for(auto file:files)snapshots.push_back(*file);for(auto& file:snapshots)views.push_back(&file);files=views;}
+    LinkedImage image;image.base_address=config.base_address;uint64_t cursor=config.base_address;
     std::map<std::pair<size_t,uint32_t>,uint64_t> addresses;
     struct Definition {size_t object;uint32_t symbol;};std::map<std::string,Definition> globals;
-    uint64_t section_count=0,symbol_count=0,relocation_count=0;
+    std::set<std::pair<size_t,uint32_t>> discarded;
+    std::set<std::string> signatures;
+    for(size_t k=0;k<files.size();++k)for(auto& group:files[k]->groups){work(group.members.size()+1);if(group.flags==1&&!signatures.insert(files[k]->symbols[group.signature].name).second){image.discarded_groups.push_back(files[k]->symbols[group.signature].name);for(auto& member:group.members)if(member.kind==ObjectGroupMember::Kind::Content)discarded.emplace(k,member.section);}}
+    auto append=[&](uint64_t alignment,uint64_t size)->uint64_t{cursor=align(cursor,alignment);auto end=add(cursor,size);if(end-config.base_address>config.max_size||end-config.base_address>SIZE_MAX)fail("linked image byte limit exceeded",Code::ResourceLimit);image.bytes.resize(size_t(end-config.base_address));auto address=cursor;cursor=end;return address;};
+    std::map<std::pair<size_t,uint32_t>,uint64_t> tls_offsets;
     for(size_t k=0;k<files.size();++k) {
-      if(!files[k])fail("null link object");auto& f=*files[k];check(f,{});if(f.format!=target.format)fail("incompatible ELF object target: "+f.source,Code::Conflict);
-      section_count=add(section_count,f.sections.size());symbol_count=add(symbol_count,f.symbols.size());relocation_count=add(relocation_count,f.relocations.size());
-      if(section_count>ObjectLimits{}.sections||symbol_count>ObjectLimits{}.symbols||relocation_count>ObjectLimits{}.relocations)fail("aggregate link count limit exceeded",Code::ResourceLimit);
+      auto& f=*files[k];
       for(uint32_t n=0;n<f.sections.size();++n) {
-        auto& s=f.sections[n];if(!(s.flags&2))continue;
-        if(opaque_section(s.type)&&std::find(target.opaque_section_types.begin(),target.opaque_section_types.end(),s.type)==target.opaque_section_types.end())fail("missing opaque section contract: "+std::to_string(s.type),Code::Unsupported);
-        if(s.flags&~uint64_t{7})fail("allocated ELF section flags require a linker adapter: "+s.name,Code::Unsupported);
-        cursor=align(cursor,s.alignment);auto end=add(cursor,s.size());if(end-options.base_address>options.max_size||end-options.base_address>SIZE_MAX)fail("linked image byte limit exceeded",Code::ResourceLimit);
-        auto offset=cursor-options.base_address;image.bytes.resize(static_cast<size_t>(end-options.base_address));if(s.type!=8)std::copy(s.bytes.begin(),s.bytes.end(),image.bytes.begin()+static_cast<ptrdiff_t>(offset));
-        addresses[{k,n}]=cursor;image.sections.push_back({k,n,s.name,cursor,offset,s.size(),s.flags});cursor=end;
+        work();auto& s=f.sections[n];if(!(s.flags&2)||discarded.contains({k,n}))continue;
+        if(opaque_section(s.type)&&std::find(contract.opaque_section_types.begin(),contract.opaque_section_types.end(),s.type)==contract.opaque_section_types.end())fail("missing opaque section contract: "+std::to_string(s.type),Code::Unsupported);
+        if(s.flags&~uint64_t{7|512|1024})fail("allocated ELF section flags require a linker adapter: "+s.name,Code::Unsupported);
+        if(s.flags&1024){if(!contract.tls||!config.tls||!config.tls->module)fail("TLS sections require target permission and an explicit module/thread-pointer layout",Code::Unsupported);
+          if(!image.tls)image.tls=LinkedTLS{config.tls->module,1,config.tls->thread_pointer_offset};auto& tls=*image.tls;auto offset=align(tls.bytes.size(),s.alignment),end=add(offset,s.size());if(end>config.max_size||end>SIZE_MAX)fail("TLS image byte limit exceeded",Code::ResourceLimit);tls.bytes.resize(size_t(end));tls.alignment=std::max(tls.alignment,s.alignment);if(s.type!=8)std::copy(s.bytes.begin(),s.bytes.end(),tls.bytes.begin()+ptrdiff_t(offset));tls_offsets[{k,n}]=offset;continue;}
+        auto address=append(s.alignment,s.size()),offset=address-config.base_address;if(s.type!=8)std::copy(s.bytes.begin(),s.bytes.end(),image.bytes.begin()+static_cast<ptrdiff_t>(offset));
+        addresses[{k,n}]=address;image.sections.push_back({k,n,s.name,address,offset,s.size(),s.flags});
       }
       for(uint32_t n=0;n<f.symbols.size();++n) {
-        auto& s=f.symbols[n];if(s.type!=0&&s.type!=1&&s.type!=2&&s.type!=3&&s.type!=4)fail("ELF symbol type requires a linker adapter: "+s.name,Code::Unsupported);
-        if(s.section==object_undefined||s.binding==SymbolBinding::Local)continue;
+        work();auto& s=f.symbols[n];if(s.type>4&&s.type!=6)fail("ELF symbol type requires a linker adapter: "+s.name,Code::Unsupported);
+        if(s.type==6&&s.section!=object_undefined&&(s.section>=f.sections.size()||!(f.sections[s.section].flags&1024)))fail("TLS symbol needs a TLS section: "+s.name,Code::Unsupported);
+        if(s.section==object_undefined||s.binding==SymbolBinding::Local||discarded.contains({k,s.section}))continue;
         auto [it,added]=globals.emplace(s.name,Definition{k,n});if(!added) {
           auto& old=files[it->second.object]->symbols[it->second.symbol];
           if(old.binding==SymbolBinding::Global&&s.binding==SymbolBinding::Global)fail("multiple strong definitions: "+s.name,Code::Conflict);
@@ -342,33 +396,58 @@ Result<LinkedImage> link_objects(std::span<const ObjectFile* const> files,const 
         }
       }
     }
-    auto defined=[&](size_t k,const ObjectSymbol& s)->uint64_t {
-      if(s.section==object_absolute)return s.value;auto it=addresses.find({k,s.section});if(it==addresses.end())fail("symbol has no allocated section: "+s.name,Code::Unsupported);return add(it->second,s.value);
+    auto defined=[&](size_t k,const ObjectSymbol& s)->DynamicSymbol {
+      if(s.type==6){auto found=tls_offsets.find({k,s.section});if(found==tls_offsets.end())fail("TLS symbol has no retained section: "+s.name,Code::Conflict);return {0,{},TLSReference{image.tls->module,add(found->second,s.value),image.tls->thread_pointer_offset}};}
+      if(s.section==object_absolute)return {s.value};auto it=addresses.find({k,s.section});if(it==addresses.end())fail("symbol has no allocated section: "+s.name,discarded.contains({k,s.section})?Code::Conflict:Code::Unsupported);return {add(it->second,s.value)};
     };
-    auto resolve=[&](size_t k,const ObjectSymbol& s)->uint64_t {
+    std::map<std::string,std::optional<DynamicSymbol>> dynamic;
+    auto resolve=[&](size_t k,const ObjectSymbol& s)->DynamicSymbol {
       if(s.binding==SymbolBinding::Local)return defined(k,s);
       if(auto it=globals.find(s.name);it!=globals.end()){auto d=it->second;return defined(d.object,files[d.object]->symbols[d.symbol]);}
       if(s.visibility)fail("hidden/internal undefined symbol: "+s.name,Code::Conflict);
-      if(auto it=options.externals.find(s.name);it!=options.externals.end())return it->second;
-      if(s.binding==SymbolBinding::Weak)return 0;fail("unresolved object symbol: "+s.name,Code::NotFound);
+      if(auto it=config.externals.find(s.name);it!=config.externals.end()){if(s.type==6)fail("TLS externals need an owning dynamic TLS contract",Code::Unsupported);return {it->second};}
+      if(config.resolve_dynamic){auto found=dynamic.find(s.name);if(found==dynamic.end()){work();auto result=config.resolve_dynamic(s);if(!result&&result.error().code!=Code::NotFound)throw result.error();std::optional<DynamicSymbol> value;if(result){value=std::move(result.value());if(!value->owner)fail("dynamic symbol provider must retain its lifetime: "+s.name,Code::Conflict);image.owners.push_back(value->owner);}found=dynamic.emplace(s.name,std::move(value)).first;}
+        if(found->second){auto value=*found->second;if(bool(value.tls)!=(s.type==6))fail("dynamic symbol TLS type disagrees with its declaration: "+s.name,Code::Conflict);return value;}}
+      if(s.binding==SymbolBinding::Weak)return {};fail("unresolved object symbol: "+s.name,Code::NotFound);
     };
-    for(auto& [name,d]:globals){auto& s=files[d.object]->symbols[d.symbol];if(s.section==object_absolute||addresses.contains({d.object,s.section}))image.symbols[name]=defined(d.object,s);}
+    for(auto& [name,d]:globals){auto& s=files[d.object]->symbols[d.symbol];if(s.type==6)image.tls->symbols[name]=defined(d.object,s).tls->offset;else if(s.section==object_absolute||addresses.contains({d.object,s.section}))image.symbols[name]=defined(d.object,s).address;}
+    auto key=[&](size_t k,uint32_t n){auto& s=files[k]->symbols[n];return s.binding==SymbolBinding::Local?"$"+std::to_string(k)+":"+std::to_string(n)+":"+s.name:s.name;};
+    std::map<std::string,Definition> got_entries,plt_entries;
+    for(size_t k=0;k<files.size();++k)for(auto& r:files[k]->relocations){work();if(!addresses.contains({k,r.section})&&!tls_offsets.contains({k,r.section}))continue;auto type=contract.relocations.find(r.type);if(type==contract.relocations.end())fail("missing ELF relocation encoding: "+std::to_string(r.type),Code::Unsupported);auto kind=type->second.kind;
+      if(kind>=RelocationKind::GOTAbsolute&&kind<=RelocationKind::PLTPCRelative){auto name=key(k,r.symbol);got_entries.emplace(name,Definition{k,r.symbol});if(kind==RelocationKind::PLTPCRelative)plt_entries.emplace(name,Definition{k,r.symbol});}}
+    std::optional<uint64_t> got_base;
+    if(!got_entries.empty()){auto& layout=*contract.got;auto size=got_entries.size()*layout.entry_bytes;auto address=append(layout.alignment,size);got_base=address;image.sections.push_back({SIZE_MAX,UINT32_MAX,".got",address,address-image.base_address,size,3});
+      for(auto& [name,d]:got_entries){work();auto symbol=resolve(d.object,files[d.object]->symbols[d.symbol]);if(symbol.tls)fail("TLS GOT construction requires a relocation adapter",Code::Unsupported);put(image.bytes,address-image.base_address,symbol.address,layout.entry_bytes,contract.format.byte_order);image.got[name]=address;address=add(address,layout.entry_bytes);}}
+    if(!plt_entries.empty()){if(!config.plt||config.plt->identity!=contract.plt->adapter||!config.plt->emit||!config.plt->verify)fail("missing/mismatched PLT construction adapter",Code::Unsupported);auto& layout=*contract.plt;
+      for(auto& [name,d]:plt_entries){work();auto address=append(layout.alignment,layout.entry_bytes),got=image.got.at(name);auto result=config.plt->emit(address,got);if(!result)throw result.error();if(result.value().size()!=layout.entry_bytes)fail("PLT adapter returned the wrong entry size",Code::Conflict);auto proof=config.plt->verify(address,got,result.value());if(!proof)throw proof.error();std::copy(result.value().begin(),result.value().end(),image.bytes.begin()+ptrdiff_t(address-image.base_address));image.plt[name]=address;image.sections.push_back({SIZE_MAX,UINT32_MAX,".plt",address,address-image.base_address,layout.entry_bytes,6});}}
     std::map<uint64_t,uint8_t> patched;
+    std::map<uint64_t,uint8_t> tls_patched;
     for(size_t k=0;k<files.size();++k)for(auto& r:files[k]->relocations) {
-      auto address=addresses.find({k,r.section});if(address==addresses.end())continue;
-      auto type=target.relocations.find(r.type);if(type==target.relocations.end())fail("missing ELF relocation encoding: "+std::to_string(r.type),Code::Unsupported);auto& t=type->second;
+      work();auto address=addresses.find({k,r.section}),tls_address=tls_offsets.find({k,r.section});if(address==addresses.end()&&tls_address==tls_offsets.end())continue;
+      auto type=contract.relocations.find(r.type);if(type==contract.relocations.end())fail("missing ELF relocation encoding: "+std::to_string(r.type),Code::Unsupported);auto& t=type->second;
       if(t.storage_bytes>files[k]->sections[r.section].size()-r.offset)fail("ELF relocation storage exceeds section");
-      auto place=add(address->second,r.offset),symbol=resolve(k,files[k]->symbols[r.symbol]);
-      Delta delta{false,symbol};if(t.kind==RelocationKind::PCRelative){auto pc=plus({false,place},t.pc_bias);if(pc.negative)fail("relocation PC base is negative",Code::Conflict);delta=difference(symbol,pc.magnitude);}
-      delta=r.implicit_addend?plus(delta,implicit_addend(files[k]->sections[r.section],r,t,target.format.byte_order)):plus(delta,r.addend);
-      auto bits=encode_delta(delta,t),bitmask=mask(t.bits)<<t.bit_offset,offset=place-image.base_address;
-      for(uint32_t n=0;n<t.storage_bytes;++n) {
-        auto shift=8*(target.format.byte_order==ByteOrder::Little?n:t.storage_bytes-1-n);auto m=uint8_t(bitmask>>shift);auto& used=patched[offset+n];if(used&m)fail("overlapping object relocation fields",Code::Conflict);used|=m;
+      bool in_tls=address==addresses.end();auto place=add(in_tls?tls_address->second:address->second,r.offset),offset=in_tls?place:place-image.base_address;auto symbol=resolve(k,files[k]->symbols[r.symbol]);auto& output=in_tls?image.tls->bytes:image.bytes;auto& used_fields=in_tls?tls_patched:patched;
+      if(t.kind==RelocationKind::Custom){auto adapter=config.relocation_adapters.find(t.adapter);if(adapter==config.relocation_adapters.end()||adapter->second.identity!=t.adapter||!adapter->second.apply||!adapter->second.verify)fail("missing custom relocation adapter: "+t.adapter,Code::Unsupported);
+        std::vector<uint8_t> zero;std::span<const uint8_t> storage;if(files[k]->sections[r.section].type==8){zero.resize(t.storage_bytes);storage=zero;}else storage=std::span(files[k]->sections[r.section].bytes).subspan(size_t(r.offset),t.storage_bytes);
+        RelocationContext context{*files[k],r,t,place,symbol.address,storage,image,symbol.tls};auto result=adapter->second.apply(context);if(!result)throw result.error();if(result.value().empty())fail("custom relocation returned no fields",Code::Conflict);
+        std::map<uint64_t,uint8_t> fields;for(auto& patch:result.value()){work(patch.bytes.size()+1);if(patch.bytes.empty()||patch.bytes.size()!=patch.mask.size()||patch.offset>storage.size()||patch.bytes.size()>storage.size()-patch.offset)fail("custom relocation patch exceeds declared storage/mask",Code::Conflict);
+          for(size_t n=0;n<patch.bytes.size();++n){auto at=offset+patch.offset+n;if((fields[at]|used_fields[at])&patch.mask[n])fail("overlapping custom relocation fields",Code::Conflict);fields[at]|=patch.mask[n];}}
+        auto proof=adapter->second.verify(context,result.value());if(!proof)throw proof.error();for(auto& patch:result.value())for(size_t n=0;n<patch.bytes.size();++n){auto at=offset+patch.offset+n;output[size_t(at)]=(output[size_t(at)]&~patch.mask[n])|(patch.bytes[n]&patch.mask[n]);used_fields[at]|=patch.mask[n];}continue;
       }
-      Reader reader{image.bytes,target.format.byte_order};auto word=reader.number(offset,t.storage_bytes);word=(word&~bitmask)|(bits<<t.bit_offset);put(image.bytes,offset,word,t.storage_bytes,target.format.byte_order);
+      Delta delta{false,symbol.address};auto kind=t.kind;
+      if(kind==RelocationKind::TLSOffset||kind==RelocationKind::TLSModule){if(!symbol.tls)fail("TLS relocation references a non-TLS symbol",Code::Conflict);delta=kind==RelocationKind::TLSModule?Delta{false,symbol.tls->module}:plus({false,symbol.tls->offset},symbol.tls->thread_pointer_offset);}
+      else if(symbol.tls)fail("address relocation references TLS storage without a TLS expression",Code::Unsupported);
+      if(kind>=RelocationKind::GOTAbsolute&&kind<=RelocationKind::PLTPCRelative){auto name=key(k,r.symbol);auto value=kind==RelocationKind::PLTPCRelative?image.plt.at(name):image.got.at(name);delta=kind==RelocationKind::GOTBaseRelative?difference(value,*got_base):Delta{false,value};}
+      if(kind==RelocationKind::PCRelative||kind==RelocationKind::GOTPCRelative||kind==RelocationKind::PLTPCRelative){if(in_tls)fail("PC-relative fields in TLS initialization need a relocation adapter",Code::Unsupported);auto pc=plus({false,place},t.pc_bias);if(pc.negative)fail("relocation PC base is negative",Code::Conflict);delta=difference(delta.magnitude,pc.magnitude);}
+      delta=r.implicit_addend?plus(delta,implicit_addend(files[k]->sections[r.section],r,t,contract.format.byte_order)):plus(delta,r.addend);
+      auto bits=encode_delta(delta,t),bitmask=mask(t.bits)<<t.bit_offset;
+      for(uint32_t n=0;n<t.storage_bytes;++n) {
+        auto shift=8*(contract.format.byte_order==ByteOrder::Little?n:t.storage_bytes-1-n);auto m=uint8_t(bitmask>>shift);auto& used=used_fields[offset+n];if(used&m)fail("overlapping object relocation fields",Code::Conflict);used|=m;
+      }
+      Reader reader{output,contract.format.byte_order};auto word=reader.number(offset,t.storage_bytes);word=(word&~bitmask)|(bits<<t.bit_offset);put(output,offset,word,t.storage_bytes,contract.format.byte_order);
     }
     return Result<LinkedImage>::ok(std::move(image));
-  }catch(const Error& e){return Result<LinkedImage>::err(e);}
+  }catch(const Error& e){return Result<LinkedImage>::err(e);}catch(const std::bad_alloc&){return Result<LinkedImage>::err({Code::ResourceLimit,"link allocation failed"});}catch(const std::exception& e){return Result<LinkedImage>::err({Code::Internal,e.what()});}catch(...){return Result<LinkedImage>::err({Code::Internal,"link adapter exception"});}
 }
 std::string print_object(const ObjectFile& file) {
   std::ostringstream out;out<<(file.format.elf_class==ElfClass::Elf32?"ELF32":"ELF64")<<" machine "<<file.format.machine<<" "<<(file.format.byte_order==ByteOrder::Little?"little":"big")<<" flags "<<file.format.flags<<"\n";

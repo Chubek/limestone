@@ -1,6 +1,7 @@
 #pragma once
 #include "../limestone/foundation.hpp"
 #include "../unisel/unisel.hpp"
+#include <map>
 namespace limestone::traceml {
 struct Expr {
   enum class Kind { Symbol, Integer, Apply, Lambda, If, Begin };
@@ -104,4 +105,15 @@ Result<RuntimeResult> apply_runtime(const RuntimeValue&,std::span<const RuntimeV
 // The backend supplies the actual condition at the safepoint. Restoration is
 // synchronous and transactional; callbacks/observers follow execute()'s rules.
 Result<RuntimeResult> resume_guard(const GuardSnapshot&,int64_t condition,const ExecutionOptions& = {});
+struct GuardValueSlot {
+  enum class Kind { Integer, Callable, Delayed } kind=Kind::Delayed;
+  uint32_t id=0;
+  std::string path;
+  std::optional<int64_t> integer;
+};
+// Stable declaration-order recovery slots cover lexical bindings, pending lazy
+// arguments and strict primitive continuation values. Delayed expressions are
+// inspected without evaluating them. Replacements own their values/environments.
+Result<std::vector<GuardValueSlot>> guard_value_slots(const GuardSnapshot&,size_t work_limit=1000000);
+Result<GuardSnapshot> recover_guard_values(const GuardSnapshot&,const std::map<uint32_t,RuntimeValue>&,size_t work_limit=1000000);
 }

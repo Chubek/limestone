@@ -36,18 +36,30 @@ struct ObjectRelocation {
   int64_t addend=0;
   bool implicit_addend=false;
 };
+struct ObjectGroupMember {
+  enum class Kind { Content, RELA, REL } kind=Kind::Content;
+  uint32_t section=0;
+  bool operator==(const ObjectGroupMember&) const = default;
+};
+struct ObjectGroup {
+  uint32_t signature=0, flags=1; // ELF GRP_COMDAT; zero preserves an ordinary group.
+  std::vector<ObjectGroupMember> members;
+  std::string name=".group";
+};
 struct ObjectFile {
   ObjectFormat format;
   std::vector<ObjectSection> sections;
   std::vector<ObjectSymbol> symbols;
   std::vector<ObjectRelocation> relocations;
   std::string source;
+  std::vector<ObjectGroup> groups;
 };
 struct ObjectLimits {
   uint64_t bytes=64*1024*1024;
-  size_t sections=16384, symbols=1048576, relocations=1048576;
+  size_t sections=16384, symbols=1048576, relocations=1048576, groups=4096;
 };
-enum class RelocationKind { Absolute, PCRelative };
+enum class RelocationKind { Absolute, PCRelative, GOTAbsolute, GOTPCRelative,
+  GOTBaseRelative, PLTPCRelative, TLSOffset, TLSModule, Custom };
 struct RelocationType {
   uint32_t type=0;
   std::string name;
@@ -57,7 +69,10 @@ struct RelocationType {
   bool signed_value=false;
   int64_t pc_bias=0;
   std::optional<bool> implicit_addend_signed;
+  std::string adapter;
 };
+struct GOTContract {uint32_t entry_bytes=0;uint64_t alignment=0;};
+struct PLTContract {std::string adapter;uint32_t entry_bytes=0;uint64_t alignment=0;};
 struct ObjectTarget {
   ObjectFormat format;
   uint64_t text_alignment=1;
@@ -66,6 +81,9 @@ struct ObjectTarget {
   // Explicit byte-preserving OS/processor section contracts. Indexed contents
   // and special allocation semantics need a separate adapter.
   std::vector<uint32_t> opaque_section_types;
+  std::optional<GOTContract> got;
+  std::optional<PLTContract> plt;
+  bool tls=false; // Explicit permission for an independently supplied TLS layout.
 };
 // Authoritative ELF identity and relocation encodings come from tooling.object_file.
 Result<ObjectTarget> object_target(const metacode::Architecture&);
@@ -88,15 +106,59 @@ struct LinkedSection {
   size_t object; uint32_t section; std::string name;
   uint64_t address, offset, size, flags;
 };
-struct LinkOptions {
-  uint64_t base_address=0, max_size=64*1024*1024;
-  std::map<std::string,uint64_t> externals;
+struct LinkedTLS {
+  uint64_t module=0,alignment=1;
+  int64_t thread_pointer_offset=0;
+  std::vector<uint8_t> bytes;
+  std::map<std::string,uint64_t> symbols; // Offsets in the owning per-thread image.
 };
 struct LinkedImage {
   uint64_t base_address=0;
   std::vector<uint8_t> bytes;
   std::vector<LinkedSection> sections;
   std::map<std::string,uint64_t> symbols;
+  std::map<std::string,uint64_t> got,plt;
+  std::optional<LinkedTLS> tls;
+  // Providers/libraries remain alive for every address installed in this image.
+  std::vector<std::shared_ptr<const void>> owners;
+  std::vector<std::string> discarded_groups;
+};
+struct TLSReference {uint64_t module=0,offset=0;int64_t thread_pointer_offset=0;};
+struct DynamicSymbol {uint64_t address=0;std::shared_ptr<const void> owner;std::optional<TLSReference> tls;};
+struct TLSContract {uint64_t module=0;int64_t thread_pointer_offset=0;};
+struct PLTAdapter {
+  std::string identity;
+  std::function<Result<std::vector<uint8_t>>(uint64_t entry,uint64_t got)> emit;
+  std::function<Result<int>(uint64_t entry,uint64_t got,std::span<const uint8_t>)> verify;
+};
+struct RelocationPatch {uint32_t offset=0;std::vector<uint8_t> bytes,mask;};
+struct RelocationContext {
+  const ObjectFile& object;
+  const ObjectRelocation& relocation;
+  const RelocationType& type;
+  uint64_t place=0,symbol=0;
+  // Original unpatched storage, including any paired relocation records in
+  // object. Patches are relative to this metadata-declared bounded window.
+  std::span<const uint8_t> storage;
+  const LinkedImage& image;
+  std::optional<TLSReference> tls_symbol;
+};
+struct RelocationAdapter {
+  std::string identity;
+  std::function<Result<std::vector<RelocationPatch>>(const RelocationContext&)> apply;
+  std::function<Result<int>(const RelocationContext&,std::span<const RelocationPatch>)> verify;
+};
+struct LinkOptions {
+  uint64_t base_address=0, max_size=64*1024*1024;
+  std::map<std::string,uint64_t> externals;
+  // Missing weak symbols resolve to zero. A found dynamic symbol must retain
+  // its provider; hidden/internal undefined symbols cannot use a provider.
+  std::function<Result<DynamicSymbol>(const ObjectSymbol&)> resolve_dynamic;
+  std::optional<TLSContract> tls;
+  std::optional<PLTAdapter> plt;
+  std::map<std::string,RelocationAdapter> relocation_adapters;
+  size_t work_limit=1000000;
+  uint64_t input_limit=64*1024*1024;
 };
 // Layout follows input/section declaration order. The image owns bytes and has no
 // executable mapping. Symbol addresses use the caller's explicit installation base.

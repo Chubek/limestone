@@ -119,6 +119,7 @@ struct GuardState {
   ExecutionResult prefix;
   uint64_t next_value=1;
   std::optional<uint32_t> condition_value;
+  bool recovered=false;
 };
 struct RuntimeAccess {
   static RuntimeValue value(Value value){return RuntimeValue(std::make_shared<RuntimeValueStorage>(RuntimeValueStorage{std::move(value)}));}
@@ -331,9 +332,10 @@ template<class Function> Result<RuntimeResult> runtime_checked(Function&& functi
 }
 }
 Result<RuntimeResult> run_runtime(const RuntimeProgram& program,std::span<const RuntimeValue> arguments,const ExecutionOptions& options) {
+  auto active=RuntimeAccess::get(program);auto config=options;
   return runtime_checked([&] {
-    auto& storage=RuntimeAccess::get(program);if(!storage)throw Error{Error::Code::InvalidArgument,"empty TraceLambda runtime program"};auto& forms=storage->program.forms;
-    Evaluator evaluator{options.step_limit,options};evaluator.final_arguments=runtime_arguments(arguments);Value result;
+    if(!active)throw Error{Error::Code::InvalidArgument,"empty TraceLambda runtime program"};auto& forms=active->program.forms;
+    Evaluator evaluator{config.step_limit,config};evaluator.final_arguments=runtime_arguments(arguments);Value result;
     for(size_t k=0;k<forms.size();++k){evaluator.following.assign(forms.begin()+k+1,forms.end());result=evaluator.eval(forms[k],{},k+1==forms.size()?evaluator.final_arguments:std::vector<Closure>{});}
     return runtime_result(evaluator,std::move(result),forms.back());
   });
@@ -342,15 +344,57 @@ Result<RuntimeResult> apply_runtime(const RuntimeValue& function,std::span<const
   return runtime_checked([&] {auto closure=runtime_closure(function);Evaluator evaluator{options.step_limit,options};auto value=evaluator.eval(closure.expression,closure.environment,runtime_arguments(arguments));return runtime_result(evaluator,std::move(value),closure.expression);});
 }
 Result<RuntimeResult> resume_guard(const GuardSnapshot& guard,int64_t condition,const ExecutionOptions& options) {
+  auto active=RuntimeAccess::get(guard);auto config=options;
   return runtime_checked([&] {
-    auto& storage=RuntimeAccess::get(guard);if(!storage)throw Error{Error::Code::InvalidArgument,"empty TraceLambda guard snapshot"};auto state=storage->state;
+    auto& storage=active;if(!storage)throw Error{Error::Code::InvalidArgument,"empty TraceLambda guard snapshot"};auto state=storage->state;
     state.control={storage->branch.expression->children[condition?1:2],storage->branch.environment};
-    Evaluator evaluator{options.step_limit,options};evaluator.execution=storage->prefix;evaluator.next_value=storage->next_value;evaluator.following=storage->following;evaluator.final_arguments=storage->final_arguments;
-    if(!options.record_trace)evaluator.execution.trace.clear();evaluator.events=evaluator.execution.trace.size();
-    evaluator.record(TraceEvent::Kind::Branch,storage->branch.expression,"if",{},storage->condition_value?std::vector<uint32_t>{*storage->condition_value}:std::vector<uint32_t>{},bool(condition));
+    Evaluator evaluator{config.step_limit,config};evaluator.execution=storage->prefix;evaluator.next_value=storage->next_value;evaluator.following=storage->following;evaluator.final_arguments=storage->final_arguments;
+    if(!config.record_trace)evaluator.execution.trace.clear();evaluator.events=evaluator.execution.trace.size();
+    if(storage->recovered)for(auto& frame:state.continuations){frame.trace_inputs.clear();for(auto value:frame.values){auto id=evaluator.record(TraceEvent::Kind::Integer,frame.owner.expression,"recover",value);if(id)frame.trace_inputs.push_back(*id);}}
+    auto actual=evaluator.record(TraceEvent::Kind::Integer,storage->branch.expression,"recover.condition",condition);
+    evaluator.record(TraceEvent::Kind::Branch,storage->branch.expression,"if",{},actual?std::vector<uint32_t>{*actual}:std::vector<uint32_t>{},bool(condition));
     auto result=evaluator.eval_state(std::move(state));
     for(size_t k=0;k<storage->following.size();++k){evaluator.following.assign(storage->following.begin()+k+1,storage->following.end());result=evaluator.eval(storage->following[k],{},k+1==storage->following.size()?storage->final_arguments:std::vector<Closure>{});}
     return runtime_result(evaluator,std::move(result),storage->following.empty()?storage->branch.expression:storage->following.back());
   });
+}
+namespace {
+struct RecoverySlot { GuardValueSlot description;Closure* closure=nullptr;int64_t* integer=nullptr; };
+std::vector<RecoverySlot> recovery_slots(GuardState& state,size_t limit){
+  auto work=[&]{if(!limit)throw Error{Error::Code::ResourceLimit,"guard recovery work limit"};--limit;};
+  std::vector<RecoverySlot> slots;
+  auto closure_slot=[&](Closure& closure,std::string path){work();GuardValueSlot info;info.id=uint32_t(slots.size());info.path=std::move(path);auto& expr=*closure.expression;
+    if(expr.kind==Expr::Kind::Integer){info.kind=GuardValueSlot::Kind::Integer;info.integer=expr.integer;}else if(expr.kind==Expr::Kind::Lambda||(expr.kind==Expr::Kind::Symbol&&!closure.environment&&primitives().contains(expr.atom)))info.kind=GuardValueSlot::Kind::Callable;
+    slots.push_back({std::move(info),&closure});
+  };
+  struct EnvCopy {std::shared_ptr<Environment> copy;std::string path;};
+  std::map<const Environment*,std::shared_ptr<Environment>> copied;std::vector<EnvCopy> pending;
+  auto environment=[&](Closure& closure,const std::string& path){work();if(!closure.environment)return;auto source=closure.environment;
+    auto found=copied.find(source.get());if(found!=copied.end()){closure.environment=found->second;return;}
+    auto copy=std::make_shared<Environment>(*source);copied.emplace(source.get(),copy);closure.environment=copy;pending.push_back({std::move(copy),path+".env"});
+  };
+  environment(state.branch,"branch");environment(state.state.control,"control");
+  auto closures=[&](auto& values,const std::string& path){for(size_t k=0;k<values.size();++k){auto name=path+"["+std::to_string(k)+"]";closure_slot(values[k],name);environment(values[k],name);}};
+  closures(state.state.arguments,"arguments");
+  for(size_t k=0;k<state.state.continuations.size();++k){auto& frame=state.state.continuations[k];auto path="continuations["+std::to_string(k)+"]";environment(frame.owner,path+".owner");closures(frame.pending,path+".pending");closures(frame.operands,path+".operands");
+    for(size_t n=0;n<frame.values.size();++n){work();slots.push_back({{GuardValueSlot::Kind::Integer,uint32_t(slots.size()),path+".values["+std::to_string(n)+"]",frame.values[n]},nullptr,&frame.values[n]});}
+  }
+  closures(state.final_arguments,"final_arguments");
+  // Breadth-first lexical environments avoid unbounded C++ recursion. Ordered
+  // bindings and first-reference paths give stable IDs independent of addresses.
+  for(size_t k=0;k<pending.size();++k){auto item=pending[k];for(auto& [name,closure]:item.copy->bindings){auto path=item.path+"."+name;closure_slot(closure,path);environment(closure,path);}}
+  return slots;
+}
+}
+Result<std::vector<GuardValueSlot>> guard_value_slots(const GuardSnapshot& input,size_t limit){
+  try{auto active=RuntimeAccess::get(input);if(!active)throw Error{Error::Code::InvalidArgument,"empty guard recovery snapshot"};auto state=*active;auto slots=recovery_slots(state,limit);std::vector<GuardValueSlot> result;for(auto& slot:slots)result.push_back(std::move(slot.description));return Result<std::vector<GuardValueSlot>>::ok(std::move(result));}
+  catch(const Error& error){return Result<std::vector<GuardValueSlot>>::err(error);}catch(const std::bad_alloc&){return Result<std::vector<GuardValueSlot>>::err({Error::Code::ResourceLimit,"guard recovery allocation failed"});}
+}
+Result<GuardSnapshot> recover_guard_values(const GuardSnapshot& input,const std::map<uint32_t,RuntimeValue>& values,size_t limit){
+  try{auto active=RuntimeAccess::get(input);if(!active)throw Error{Error::Code::InvalidArgument,"empty guard recovery snapshot"};auto state=*active;auto slots=recovery_slots(state,limit);
+    for(auto& [id,value]:values){if(id>=slots.size())throw Error{Error::Code::InvalidArgument,"unknown guard recovery slot"};auto& slot=slots[id];if(slot.integer){auto integer=value.integer();if(!integer)throw Error{Error::Code::Conflict,"strict guard continuation requires an integer"};*slot.integer=*integer;}else *slot.closure=runtime_closure(value);}
+    if(!values.empty()){state.recovered=true;state.prefix.trace.clear();state.prefix.result_value.reset();state.next_value=1;state.condition_value.reset();}
+    return Result<GuardSnapshot>::ok(RuntimeAccess::guard(std::move(state)));
+  }catch(const Error& error){return Result<GuardSnapshot>::err(error);}catch(const std::bad_alloc&){return Result<GuardSnapshot>::err({Error::Code::ResourceLimit,"guard recovery allocation failed"});}
 }
 }

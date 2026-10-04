@@ -3,6 +3,19 @@ add_library(limestone_satie INTERFACE)
 add_library(satie::satie ALIAS limestone_satie)
 target_include_directories(limestone_satie SYSTEM INTERFACE
   ${PROJECT_SOURCE_DIR}/third_party/satie/include)
+# New Satie headers (CDCL clause database, theory encoders) allocate transient
+# scratch through satie::MemoryResource, which lives in Satie's compiled
+# sources and is backed by the vendored memtkx headers. Compile just that
+# translation unit here; the libglr-backed frontend parsers stay out so
+# consumers do not inherit the parser backends.
+add_library(limestone_satie_runtime STATIC
+  ${PROJECT_SOURCE_DIR}/third_party/satie/src/SatieMemory.cpp)
+target_include_directories(limestone_satie_runtime SYSTEM PUBLIC
+  ${PROJECT_SOURCE_DIR}/third_party/satie/include)
+target_include_directories(limestone_satie_runtime SYSTEM PRIVATE
+  ${PROJECT_SOURCE_DIR}/third_party/satie/third_party/memtkx/include)
+target_compile_features(limestone_satie_runtime PUBLIC cxx_std_20)
+target_link_libraries(limestone_satie INTERFACE limestone_satie_runtime)
 
 add_library(limestone_equinox INTERFACE)
 add_library(equinox::equinox-ng ALIAS limestone_equinox)

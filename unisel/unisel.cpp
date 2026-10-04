@@ -1,8 +1,8 @@
 #include "unisel.hpp"
 #include "schedrow/operand_facts.hpp"
 #include "schedrow/memory_metadata.hpp"
-#include <SatieDPLL.hpp>
-#include <bit>
+#include <SatieCDCL.hpp>
+#include <SatieFrontendOPB.hpp>
 #include <limits>
 #include <map>
 #include <set>
@@ -135,53 +135,51 @@ Result<ConstraintModel> build_model(const Program& input,const std::vector<Patte
   return Result<ConstraintModel>::ok(std::move(m));
 }
 namespace {
-struct Encoder {
-  std::vector<std::vector<int32_t>> clauses;
-  int32_t next;
-  int32_t variable(){return ++next;}
-  int32_t xor_gate(int32_t a,int32_t b) {
-    auto c=variable();clauses.insert(clauses.end(),{{a,b,-c},{a,-b,c},{-a,b,c},{-a,-b,-c}});return c;
-  }
-  int32_t carry_gate(int32_t a,int32_t b,int32_t c) {
-    auto d=variable();clauses.insert(clauses.end(),{{-a,-b,d},{-a,-c,d},{-b,-c,d},{a,b,-d},{a,c,-d},{b,c,-d}});return d;
-  }
-  std::vector<int32_t> cost(const std::vector<Candidate>& candidates,uint64_t total) {
-    auto zero=variable();clauses.push_back({-zero});
-    size_t width=std::max<unsigned>(1,std::bit_width(total));std::vector<int32_t> bits(width,zero);
-    for(size_t i=0;i<candidates.size();++i) {
-      if(!candidates[i].cost)continue;
-      int32_t carry=zero;
-      for(size_t k=0;k<width;++k) {
-        int32_t b=(uint64_t(candidates[i].cost)&(uint64_t(1)<<k))?static_cast<int32_t>(i+1):zero;
-        auto sum=xor_gate(xor_gate(bits[k],b),carry);carry=carry_gate(bits[k],b,carry);bits[k]=sum;
-      }
-      clauses.push_back({-carry});
-    }
-    return bits;
-  }
-  std::vector<std::vector<int32_t>> bounded(const std::vector<int32_t>& bits,uint64_t bound) const {
-    auto cnf=clauses;
-    for(size_t k=0;k<bits.size();++k)if(!(bound&(uint64_t(1)<<k))) {
-      std::vector<int32_t> clause{-bits[k]};
-      for(size_t j=k+1;j<bits.size();++j)clause.push_back(bound&(uint64_t(1)<<j)?-bits[j]:bits[j]);
-      cnf.push_back(std::move(clause));
-    }
-    return cnf;
-  }
-};
+// Selection variables are 1-based Satie variables in candidate order, so the
+// solver adapter below never exposes vendor types through unisel.hpp.
+bool has_empty_clause(const std::vector<std::vector<int32_t>>& clauses) {
+  return std::any_of(clauses.begin(),clauses.end(),[](auto& c){return c.empty();});
+}
 bool satisfiable(const std::vector<std::vector<int32_t>>& clauses) {
-  return satie::solve_dpll(satie::CNF(clauses)).status==satie::SolveStatus::SAT;
+  // CDCL cannot ingest an empty clause (nothing to watch); it is UNSAT by
+  // definition, e.g. a required operation with no covering candidate.
+  if(has_empty_clause(clauses))return false;
+  satie::CNF cnf;
+  for(auto& clause:clauses)cnf.add_clause(satie::Clause(clause.begin(),clause.end()));
+  return satie::solve_cdcl(cnf).status==satie::SolveStatus::SAT;
+}
+// Pseudo-Boolean cost bound over the selection variables, bit-blasted with
+// Satie's theory encoder: sum(cost[i] * select[i]) <= bound. Hard coverage
+// clauses stay native CNF; only the weighted bound uses integer reasoning.
+std::vector<std::vector<int32_t>> bounded(const std::vector<std::vector<int32_t>>& hard,const std::vector<Candidate>& candidates,uint64_t bound) {
+  const size_t n=candidates.size();
+  satie::frontend::PBConstraint limit;
+  for(size_t i=0;i<n;++i)if(candidates[i].cost>0)limit.terms.push_back({candidates[i].cost,static_cast<int>(i+1)});
+  limit.cmp=satie::frontend::PBCmp::Le;
+  limit.rhs=static_cast<long long>(bound);
+  if(limit.terms.empty())return hard;
+  satie::frontend::PBProblem probe;
+  probe.variables=static_cast<int>(n);
+  probe.constraints.push_back(limit);
+  const int width=satie::frontend::pb_working_width(probe);
+  satie::theory::Encoder enc(static_cast<satie::Var>(n+1));
+  for(auto& clause:hard)enc.add_clause(satie::Clause(clause.begin(),clause.end()));
+  std::vector<satie::Lit> bits;bits.reserve(n);
+  for(size_t v=1;v<=n;++v)bits.push_back(static_cast<satie::Lit>(v));
+  satie::frontend::blast_pb_constraint(enc,bits,limit,width);
+  std::vector<std::vector<int32_t>> out;
+  for(auto& clause:enc.take_clauses())out.emplace_back(clause.begin(),clause.end());
+  return out;
 }
 }
 Result<Selection> solve(const Program& p,const std::vector<Pattern>& patterns) {
   auto model=build_model(p,patterns);if(!model)return Result<Selection>::err(model.error());
   auto& m=model.value();uint64_t total=0;for(auto& c:m.candidates)total+=static_cast<uint32_t>(c.cost);
-  Encoder e{m.clauses,static_cast<int32_t>(m.candidates.size())};auto bits=e.cost(m.candidates,total);
-  if(!satisfiable(e.clauses))return Result<Selection>::err({Error::Code::Unsatisfiable,"no exact instruction covering satisfies the selection model"});
+  if(!satisfiable(m.clauses))return Result<Selection>::err({Error::Code::Unsatisfiable,"no exact instruction covering satisfies the selection model"});
   uint64_t low=0,high=total;
-  while(low<high){auto mid=low+(high-low)/2;if(satisfiable(e.bounded(bits,mid)))high=mid;else low=mid+1;}
+  while(low<high){auto mid=low+(high-low)/2;if(satisfiable(bounded(m.clauses,m.candidates,mid)))high=mid;else low=mid+1;}
   if(low>std::numeric_limits<int>::max())return Result<Selection>::err({Error::Code::ResourceLimit,"selection cost overflow"});
-  auto cnf=e.bounded(bits,low);Selection s;
+  auto cnf=bounded(m.clauses,m.candidates,low);Selection s;
   // Fix the optimum lexicographically; vendor decision order is not observable.
   for(size_t i=0;i<m.candidates.size();++i) {
     auto lit=static_cast<int32_t>(i+1);cnf.push_back({lit});

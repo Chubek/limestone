@@ -15,8 +15,9 @@ auto region = limestone::unisel::emit_scheduler(prepared.value(), patterns,
 ```
 
 `candidates` and `constraints` provide inspection before solving. The global
-selector uses Satie with coverage, incompatibility, boundary-definition, and
-dependency legality constraints; `solve_greedy` is an explicit alternative.
+selector uses Satie CDCL with coverage, incompatibility, boundary-definition, and
+dependency legality constraints, plus pseudo-Boolean cost bounds bit-blasted
+through Satie's theory encoder; `solve_greedy` is an explicit alternative.
 Selection minimizes scalar pattern costs and keeps physical allocation and issue
 cycles for downstream stages. Nested pattern trees support concrete types,
 repeated named bindings, immediate ranges, and register-class constraints.
