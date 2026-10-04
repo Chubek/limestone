@@ -17,8 +17,23 @@ ownership while symbols are registered/invoked. Supported argument kinds are
 variadic call shape with an explicit fixed-argument count. Ellipsis argument
 types are already C-promoted: `long long`, `double`, and `void *`. Each distinct
 argument shape is registered separately; calls validate every argument kind and
-the total count. The same ownership and library-close rules apply. Aggregate and
-vector native calls need additional adapters.
+the total count. The same ownership and library-close rules apply.
+
+`exl_native_type_scalar`, `exl_native_type_struct`, and `exl_native_type_array`
+create immutable owning descriptors for exact-width scalar values, natural C
+records, and embedded fixed arrays. Children and source handles may be destroyed
+after construction or registration. `exl_native_type_layout` and
+`exl_native_type_offset` expose checked host layouts. Expanded types are bounded
+to 1,024 nodes, 32 nesting levels, and 1 MiB.
+
+`exl_register_native_data` / `exl_library_bind_data` prepare exact nonvariadic
+scalar/aggregate signatures; `exl_call_data` passes buffers by value. It copies
+inputs into aligned temporary storage, permits argument/result overlap, and
+writes result bytes only on success. Pointer pointees stay borrowed. libffi owns
+aggregate ABI classification; InteropTk independently checks primitives and
+flat scalar records. Nested natural structs and embedded arrays are supported;
+top-level arrays, packed/over-aligned records, unions, bitfields, vectors,
+variadic aggregates, and foreign exceptions require separate ABI adapters.
 
 The supplied FFItk entry point returns `FFI_ENOSYS`; the isolated `native.c`
 adapter uses libffi when `LIMESTONE_ENABLE_NATIVE_FFI=ON`. Disabling it keeps

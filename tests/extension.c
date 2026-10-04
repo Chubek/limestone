@@ -1,5 +1,6 @@
 #include "exolayer.h"
 #include "native_fixture.h"
+#include "data_fixture.h"
 #include <stdarg.h>
 static void extension_sum(const exl_value_t* args,size_t count,exl_value_t* result,void* userdata) {
   (void)userdata;if(count!=2)return;result->kind=EXL_I64;result->as.i64=args[0].as.i64+args[1].as.i64;
@@ -16,3 +17,10 @@ double exl_fixture_native_variadic(long long count,...) {
   for(k=0;k<count;++k){long long integer=va_arg(args,long long);double real=va_arg(args,double);void *pointer=va_arg(args,void *);result+=(double)integer+real+(pointer?1.0:0.0);}
   va_end(args);return result;
 }
+struct exl_fixture_pair exl_fixture_data_pair(struct exl_fixture_pair value,int64_t delta,double factor) {
+  value.count+=delta;value.weight*=factor;return value;
+}
+struct exl_fixture_small exl_fixture_data_small(struct exl_fixture_small value) {value.tag=-value.tag;value.count+=1;return value;}
+struct exl_fixture_hfa exl_fixture_data_hfa(struct exl_fixture_hfa value,float delta) {value.x+=delta;value.y+=delta;value.z+=delta;value.w+=delta;return value;}
+struct exl_fixture_nested exl_fixture_data_nested(struct exl_fixture_nested value) {value.tag+=1;value.pair.count+=2;value.pair.weight*=3;value.lanes[0]+=4;value.lanes[1]+=5;value.lanes[2]+=6;return value;}
+struct exl_fixture_large exl_fixture_data_large(struct exl_fixture_large a,struct exl_fixture_large b) {size_t k;for(k=0;k<8;++k)a.values[k]+=b.values[k];a.weight+=b.weight;return a;}

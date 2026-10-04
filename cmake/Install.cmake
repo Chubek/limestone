@@ -1,6 +1,6 @@
 # Public API layout mirrors the source tree, including relative header includes.
 set(limestone_install_targets limestone_foundation limestone_parsers metacode
-  schedrow regtl regtl_schedrow limeburg unisel limeburg_umd
+  schedrow regtl regtl_schedrow limeburg unisel limeburg_umd limeburg_infobank
   limeburg_text schedrow_text regtl_text bin2bin bin2bin_codegen bin2bin_object machineir_bridge
   tunah tunah_unisel tunah_bin2bin traceml exolayer limestone_core limestone_il limestone_optimization limestone_object)
 foreach(target IN LISTS limestone_install_targets)
@@ -10,7 +10,7 @@ foreach(target IN LISTS limestone_install_targets)
 endforeach()
 # These static implementations are link dependencies, never public parser types.
 list(APPEND limestone_install_targets limestone_parser_tables limestone_dparse)
-install(TARGETS ${limestone_install_targets} limestone-cli EXPORT LimestoneTargets
+install(TARGETS ${limestone_install_targets} limestone-cli limeburg-generate-specs EXPORT LimestoneTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -26,6 +26,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/third_party/exolangtk/include/
   FILES_MATCHING PATTERN "*.h")
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/metacode/infobank/ DESTINATION ${CMAKE_INSTALL_DATADIR}/limestone/infobank)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/tunah/tuners/ DESTINATION ${CMAKE_INSTALL_DATADIR}/limestone/tuners)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/limeburg/specs/ DESTINATION ${CMAKE_INSTALL_DATADIR}/limestone/limeburg/specs)
 install(FILES ${PROJECT_SOURCE_DIR}/vmweave/vmweave.lua DESTINATION ${CMAKE_INSTALL_DATADIR}/limestone/vmweave)
 install(FILES ${PROJECT_SOURCE_DIR}/README.md ${PROJECT_SOURCE_DIR}/IMPLEMENTATION.md ${PROJECT_SOURCE_DIR}/LICENSE
   DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/limestone)

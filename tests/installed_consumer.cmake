@@ -44,6 +44,17 @@ execute_process(COMMAND "${BINARY}/installed-consumer/limestone-object-consumer"
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "Standalone object consumer failed: ${output}${error}")
 endif()
+execute_process(COMMAND "${BINARY}/installed-consumer/limestone-infobank-consumer"
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Standalone Infobank consumer failed: ${output}${error}")
+endif()
+execute_process(COMMAND "${prefix}/${BIN_DIR}/limeburg-generate-specs" --check
+  "${prefix}/${DATA_DIR}/limestone/infobank" "${prefix}/${DATA_DIR}/limestone/limeburg/specs"
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Relocated Infobank specifications failed: ${output}${error}")
+endif()
 if(PYTHON_BINDINGS)
   set(python_dir "$ENV{LIMESTONE_TEST_PYTHON_INSTALL_DIR}")
   if(NOT IS_ABSOLUTE "${python_dir}")

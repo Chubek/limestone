@@ -53,6 +53,13 @@ foreach(component IN ITEMS limeburg schedrow regtl)
   add_library(${component}_text STATIC ${component}/text.cpp)
   target_link_libraries(${component}_text PUBLIC ${component} metacode PRIVATE limestone_parsers)
 endforeach()
+add_library(limeburg_infobank STATIC limeburg/infobank.cpp)
+target_link_libraries(limeburg_infobank PUBLIC limeburg_umd limeburg_text PRIVATE $<BUILD_INTERFACE:metatk::sexprtk>)
+add_executable(limeburg-generate-specs limeburg/generate_specs.cpp)
+target_link_libraries(limeburg-generate-specs PRIVATE limeburg_infobank)
+add_custom_target(limeburg-regenerate-specs
+  COMMAND limeburg-generate-specs ${PROJECT_SOURCE_DIR}/metacode/infobank ${PROJECT_SOURCE_DIR}/limeburg/specs
+  DEPENDS limeburg-generate-specs VERBATIM)
 add_library(limestone_il STATIC limestone/il.cpp)
 target_link_libraries(limestone_il PUBLIC limestone_foundation PRIVATE unisel limeburg_text schedrow_text regtl_text)
 
@@ -122,6 +129,14 @@ if(BUILD_TESTING)
 add_executable(limestone-text-il-test tests/text_il.cpp)
 target_link_libraries(limestone-text-il-test PRIVATE limeburg_text schedrow_text regtl_text)
 add_test(NAME text-il COMMAND limestone-text-il-test ${PROJECT_SOURCE_DIR}/tests/fixtures)
+add_executable(limestone-limeburg-specs-test tests/limeburg_specs.cpp)
+target_link_libraries(limestone-limeburg-specs-test PRIVATE limeburg_infobank)
+add_test(NAME limeburg-specs COMMAND limestone-limeburg-specs-test ${PROJECT_SOURCE_DIR})
+add_test(NAME limeburg-specs-generated COMMAND limeburg-generate-specs --check
+  ${PROJECT_SOURCE_DIR}/metacode/infobank ${PROJECT_SOURCE_DIR}/limeburg/specs)
+add_test(NAME limeburg-specs-cli COMMAND ${CMAKE_COMMAND}
+  -DGENERATOR=$<TARGET_FILE:limeburg-generate-specs> -DCLI=$<TARGET_FILE:limestone-cli> -DSOURCE=${PROJECT_SOURCE_DIR} -DBINARY=${PROJECT_BINARY_DIR}
+  -P ${PROJECT_SOURCE_DIR}/tests/limeburg_specs_cli.cmake)
 add_test(NAME text-il-cli COMMAND ${CMAKE_COMMAND}
   -DCLI=$<TARGET_FILE:limestone-cli> -DFIXTURES=${PROJECT_SOURCE_DIR}/tests/fixtures
   -P ${PROJECT_SOURCE_DIR}/tests/text_il_cli.cmake)
@@ -207,6 +222,11 @@ foreach(target IN ITEMS limestone-test-extension limestone-bad-extension)
   target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/exolayer)
 endforeach()
 add_test(NAME interop COMMAND limestone-interop-test $<TARGET_FILE:limestone-test-extension> $<TARGET_FILE:limestone-bad-extension>)
+add_executable(limestone-exolayer-data-test tests/exolayer_data.c)
+target_link_libraries(limestone-exolayer-data-test PRIVATE exolayer)
+set_target_properties(limestone-exolayer-data-test PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
+target_compile_options(limestone-exolayer-data-test PRIVATE $<$<C_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
+add_test(NAME exolayer-data COMMAND limestone-exolayer-data-test $<TARGET_FILE:limestone-test-extension>)
 add_test(NAME exolayer-manifest COMMAND ${PERL_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/exolayer_manifest.pl ${PROJECT_SOURCE_DIR})
 add_test(NAME c-abi-symbols COMMAND ${PERL_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/c_abi_symbols.pl
   ${PROJECT_SOURCE_DIR} ${CMAKE_NM} $<TARGET_FILE:limestone_core> $<TARGET_FILE:limestone_il> $<TARGET_FILE:limestone_optimization> $<TARGET_FILE:limestone_object>)
@@ -214,6 +234,7 @@ add_test(NAME installed-consumer COMMAND ${CMAKE_COMMAND}
   -DBINARY=${PROJECT_BINARY_DIR} -DSOURCE=${PROJECT_SOURCE_DIR}
   -DCC=${CMAKE_C_COMPILER} -DCXX=${CMAKE_CXX_COMPILER}
   -DPYTHON_BINDINGS=${LIMESTONE_BUILD_PYTHON_BINDINGS}
+  -DBIN_DIR=${CMAKE_INSTALL_BINDIR} -DDATA_DIR=${CMAKE_INSTALL_DATADIR}
   "-DC_FLAGS=${CMAKE_C_FLAGS}" "-DCXX_FLAGS=${CMAKE_CXX_FLAGS}"
   "-DLINK_FLAGS=${CMAKE_EXE_LINKER_FLAGS}" -P ${PROJECT_SOURCE_DIR}/tests/installed_consumer.cmake)
 add_executable(limestone-tunah-tuners-test tests/tunah_tuners.cpp)

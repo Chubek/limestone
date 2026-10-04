@@ -233,6 +233,16 @@ Result<MachineDescription> from_metacode(const metacode::Architecture& architect
   V::Array registers;std::set<std::string> names;
   for(auto& r:architecture.registers){names.insert("$"+r.name);registers.emplace_back(Object{{"name",V(r.name)},{"class",V(r.klass)},{"width",V(int64_t(r.width))},{"number",V(int64_t(r.number))}});}
   auto ids=identities(names);for(auto& r:architecture.registers){auto id=ids.at("$"+r.name);machine.physical_names[r.name]=id;machine.register_classes[r.klass].push_back(id);}
+  // Virtual ISAs declare logical classes with no physical register inventory.
+  // Preserve those categories instead of dropping them during normalization.
+  if(auto profile=architecture.fields.find("profile");profile!=architecture.fields.end()) {
+    auto fields=std::get_if<Object>(&profile->second.data);if(!fields)return Result<MachineDescription>::err({Error::Code::InvalidArgument,"profile must be an object"});
+    if(auto classes=fields->find("register_classes");classes!=fields->end()) {
+      auto array=std::get_if<V::Array>(&classes->second.data);if(!array)return Result<MachineDescription>::err({Error::Code::InvalidArgument,"profile register_classes must be an array"});
+      std::set<std::string> seen;
+      for(auto& entry:*array){auto name=std::get_if<std::string>(&entry.data);if(!name||name->empty()||!seen.insert(*name).second)return Result<MachineDescription>::err({Error::Code::InvalidArgument,"invalid/duplicate profile register class"});machine.register_classes.try_emplace(*name);}
+    }
+  }
   machine.metadata["registers"]=V(std::move(registers));
   Object aliases;for(auto& [a,b]:architecture.aliases){aliases[a]=V(b);if(machine.physical_names.contains(a)&&machine.physical_names.contains(b))machine.aliases.emplace_back(machine.physical_names.at(a),machine.physical_names.at(b));}machine.metadata["register_aliases"]=V(std::move(aliases));
   Object encodings;for(auto& [name,fields]:architecture.encodings)encodings[name]=V(fields);machine.metadata["encodings"]=V(std::move(encodings));

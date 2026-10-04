@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(LimestoneConsumer LANGUAGES C CXX)
-find_package(Limestone 0.1 CONFIG REQUIRED COMPONENTS core il object bin2bin_object optimization exolayer parsers tunah_unisel tunah_bin2bin limeburg_text schedrow_text regtl_text)
+find_package(Limestone 0.1 CONFIG REQUIRED COMPONENTS core il object bin2bin_object optimization exolayer parsers tunah_unisel tunah_bin2bin limeburg_text limeburg_infobank schedrow_text regtl_text)
 add_executable(limestone-consumer main.cpp other.cpp api.c)
 target_link_libraries(limestone-consumer PRIVATE Limestone::core Limestone::il Limestone::exolayer Limestone::parsers
   Limestone::tunah_unisel Limestone::tunah_bin2bin Limestone::limeburg_text Limestone::schedrow_text Limestone::regtl_text)
@@ -19,3 +19,5 @@ add_executable(limestone-object-consumer ../object_c_api.c)
 target_link_libraries(limestone-object-consumer PRIVATE Limestone::object)
 target_compile_options(limestone-object-consumer PRIVATE $<$<C_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
 set_target_properties(limestone-object-consumer PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
+add_executable(limestone-infobank-consumer infobank.cpp)
+target_link_libraries(limestone-infobank-consumer PRIVATE Limestone::limeburg_infobank)

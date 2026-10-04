@@ -79,6 +79,20 @@ The standalone C document/selection API is in `limestone/il.h`; its selection
 text is a canonical Schedrow handoff. Target timing can be supplied to the next
 stage through its machine model.
 
+## Infobank specifications
+
+[`specs/`](specs/README.md) contains generated `.lburg` files for all 23
+architectures in the Infobank manifest, with instruction-scoped semantic trees,
+register classes, explicit immediate/alignment legality, costs, provenance, and
+per-instruction coverage records. Regenerate with
+`cmake --build build --target limeburg-regenerate-specs`; verify with
+`build/limeburg-generate-specs --check metacode/infobank limeburg/specs`.
+`infobank.hpp` / `Limestone::limeburg_infobank` supplies the owning C++ generation
+boundary, retaining the normalized UMD alongside the rules. Explicit selection
+trees describe generic source computations; inventory roots retain target
+instruction identity and depend on their source/target adapters' effect and ABI
+contracts. See the specification guide for naming and supported coverage.
+
 ## Declarative operand legality
 
 Rules accept the same declarative operand predicates as Unisel:
