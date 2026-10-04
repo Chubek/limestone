@@ -76,6 +76,7 @@ class RuntimeProgram {
   friend struct RuntimeAccess;
 public:
   RuntimeProgram()=default;
+  bool valid() const {return bool(storage_);}
 };
 // Safepoint after evaluating an if condition. The snapshot owns the lexical
 // environment, pending applications, strict primitive/sequence continuations,
@@ -86,6 +87,7 @@ class GuardSnapshot {
   friend struct RuntimeAccess;
 public:
   GuardSnapshot()=default;
+  bool valid() const {return bool(storage_);}
   bool expected() const;
   size_t offset() const;
 };

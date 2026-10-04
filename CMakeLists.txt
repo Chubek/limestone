@@ -95,7 +95,7 @@ target_link_libraries(tunah_stages PUBLIC tunah_unisel limeburg regtl traceml ma
 add_library(limestone_optimization STATIC limestone/optimization.cpp)
 target_link_libraries(limestone_optimization PUBLIC limestone_foundation PRIVATE tunah_unisel tunah_bin2bin)
 
-add_library(traceml STATIC traceml/traceml.cpp traceml/pipeline_adapter.cpp)
+add_library(traceml STATIC traceml/traceml.cpp traceml/pipeline_adapter.cpp traceml/native.cpp)
 target_link_libraries(traceml PUBLIC limestone_foundation)
 target_link_libraries(traceml PRIVATE limestone_parser_tables limestone_dparse $<BUILD_INTERFACE:metatk::sexprtk>)
 target_include_directories(traceml PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/traceml> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/traceml>)
@@ -259,7 +259,7 @@ set_target_properties(limestone-exolayer-data-test PROPERTIES C_STANDARD 99 C_ST
 target_compile_options(limestone-exolayer-data-test PRIVATE $<$<C_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
 add_test(NAME exolayer-data COMMAND limestone-exolayer-data-test $<TARGET_FILE:limestone-test-extension>)
 add_executable(limestone-exolayer-custom-test tests/exolayer_custom.cpp tests/exolayer_custom.c)
-target_link_libraries(limestone-exolayer-custom-test PRIVATE exolayer)
+target_link_libraries(limestone-exolayer-custom-test PRIVATE exolayer limestone_foundation)
 set_target_properties(limestone-exolayer-custom-test PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
 target_compile_options(limestone-exolayer-custom-test PRIVATE $<$<C_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
 add_test(NAME exolayer-custom COMMAND limestone-exolayer-custom-test)
