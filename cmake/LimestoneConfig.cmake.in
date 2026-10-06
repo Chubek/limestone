@@ -1,4 +1,10 @@
 @PACKAGE_INIT@
+if(NOT TARGET Limestone::vmweave_lua)
+  include(CMakeFindDependencyMacro)
+  find_dependency(Lua @VMWEAVE_LUA_VERSION@ EXACT)
+  add_library(Limestone::vmweave_lua INTERFACE IMPORTED)
+  set_target_properties(Limestone::vmweave_lua PROPERTIES INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}")
+endif()
 if(@LIMESTONE_ENABLE_PERSISTENT_CACHE@ AND NOT TARGET Limestone::lmdb)
   find_library(Limestone_LMDB_LIBRARY NAMES lmdb REQUIRED)
   add_library(Limestone::lmdb UNKNOWN IMPORTED)

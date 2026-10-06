@@ -2,18 +2,18 @@
 
 [Previous: Native interoperability](16-exolayer-native-interoperability.md) · [Contents](README.md) · [Next: C/C++ embedding](18-c-and-cpp-embedding.md)
 
-## 17.1 A small declarative VM frontend
+## 17.1 A declarative VM specification compiler
 
-VMWeave is a Lua DSL for describing a VM name, state fields, named instruction
-handlers, and optional dispatch/hooks. It emits deterministic self-contained C
-execution skeletons. Mutable execution state belongs to an explicit VM struct,
+VMWeave compiles Lua descriptions through a C++/Kaguya frontend into a validated
+model, versioned STK-00, and deterministic optional C99 runtime components.
+Mutable execution state belongs to an explicit VM struct,
 so independent instances can exist without hidden global state.
 
-The implementation and public Lua API are in
-[vmweave/vmweave.lua](../vmweave/vmweave.lua). VMWeave does not define an ISA
-inventory, register allocator, scheduler, binary encoder, or memory manager.
-Those facilities can be connected through the embedding application's state and
-hooks.
+The current API, component guide, examples, and native requirements are in
+[vmweave/README.md](../vmweave/README.md). The intermediate format is defined in
+[STK-00.md](../vmweave/STK-00.md). The builder API below remains supported;
+standalone Lua `emit` calls invoke `vmweave-cli` (set `VMWEAVE_EXECUTABLE` or place
+it on PATH). Lua remains declarative; the C++ library owns generation.
 
 This separation is useful when building a small interpreter around Limestone.
 The DSL defines the execution skeleton; Metacode can define an independently
@@ -88,8 +88,9 @@ body. Names and explicit opcodes must be unique. Bodies must be strings without
 embedded NUL. The DSL copies validated declaration attributes and rejects
 unrecognized keys.
 
-Bodies are caller-supplied C. VMWeave does not parse their arithmetic, add bounds
-checks, define signed-overflow behavior, or infer guest memory semantics. In this
+Bodies are caller-supplied C, preserved in STK-00 foreign-C primitives. VMWeave
+checks its stack primitives/effects but does not define arithmetic-overflow
+behavior or infer guest memory semantics. In this
 example, unsigned counter arithmetic has C's defined modular behavior. A checked
 guest arithmetic model would require an explicit handler implementation.
 
@@ -108,7 +109,7 @@ and one ordinary handler function per instruction. For `Counter`, handlers are
 named `Counter_increment`, `Counter_reset`, and so on, with a `Counter_vm *`
 parameter.
 
-There is no implicit dispatcher in plain output. An embedder can call handlers,
+Plain output provides initialization and handlers. An embedder can call handlers,
 build its own dispatch table, or wrap them in a separately defined execution loop.
 The ordinary function boundary makes these policies compositional.
 
@@ -128,8 +129,8 @@ assigned from available numbers in sorted handler-name order.
 
 Initialization zeroes state and hooks. `step` rejects a NULL VM or unknown opcode
 with `-1`. A known opcode dispatches its handler and returns zero after ordinary
-completion. The generator does not implement fetch/decode/PC advancement unless
-the host supplies those actions through state and handlers.
+completion. The `run` API fetches decoded tapes and advances the PC; this legacy
+example invokes individual handlers without selecting tape/compiler components.
 
 `init` and `step` are reserved handler names when dispatch is enabled. Unknown
 dispatch strategies and generation keys fail validation. Automatic opcode
@@ -180,7 +181,7 @@ io.write(vm:emit({dispatch = "switch", hooks = true}))
 Generate from the repository root:
 
 ```sh
-LUA_PATH='./vmweave/?.lua;;' lua /tmp/opencode/counter.lua \
+VMWEAVE_EXECUTABLE=build/vmweave/vmweave-cli LUA_PATH='./vmweave/?.lua;;' lua /tmp/opencode/counter.lua \
   > /tmp/opencode/counter-vm.c
 ```
 
@@ -229,8 +230,26 @@ installer ownership. Metacode should describe the bytecode semantics when those
 semantics are shared with translation. Handler C bodies and ISA metadata need
 independent behavior tests so they remain consistent.
 
-Memory-management and optimization hooks stay extension points. VMWeave does not
-choose an allocator, an equality-saturation vocabulary, or executable mapping.
+Optional memory/object/frame/module/rewrite/cache components are available; see
+the component guide for ownership and validation contracts. Allocators and
+executable mappings are explicit choices. VMWeave supplies a MachineIR native C
+backend for assembly, AOT shared images and baseline JIT execution on POSIX hosts.
+Authoritative C handlers become explicit foreign-runtime bindings in the
+MachineIR CFG and are compiled by the configured host C compiler.
+
+```sh
+build/vmweave/vmweave-cli --native \
+  --program vmweave/examples/calculator.tape \
+  -o build/calculator-native vmweave/examples/calculator.lua
+```
+
+The generated AOT header provides `Calculator_run_native(vm, budget)`. C++ callers
+can use `vmweave/native.hpp` and owning `NativeProgram` handles. Generated VMs
+selecting `jit` can define `VMWEAVE_ENABLE_NATIVE` and call `NAME_jit_native_bind`
+to install the built-in compiler/executor/releaser. Link `Limestone::vmweave`.
+State size/ABI fingerprints are checked before execution; native handles own tape
+snapshots and loaded code. The component guide documents options, statuses,
+saved MachineIR envelopes and lifetime requirements.
 
 ## 17.11 Determinism and tests
 

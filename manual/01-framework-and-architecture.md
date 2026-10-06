@@ -83,7 +83,7 @@ snapshot would omit both kinds of information.
 | Bin2Bin | Decode, lift, translate, encode, and observe binary regions | Execution/state models and codec support are explicit |
 | TraceML | Functional frontend and MetaKrivine execution | Lazy source semantics precede target lowering |
 | Exolayer | Host C ABI/FFI and extension boundary | Host ABI is not inferred from a compiler target |
-| VMWeave | Lua VM declarations and generated C skeletons | Runtime policies come from the embedder |
+| VMWeave | Lua/C++ specification compiler, STK-00 and optional C runtimes | Native semantic lowering and runtime policies use explicit adapters |
 | Limestone core | Coordinate stages and expose embedding entry points | Algorithms stay in their owning components |
 
 The repository directories use these names directly. Public C++ headers are

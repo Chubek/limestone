@@ -18,7 +18,8 @@ Package names depend on the operating system.
 Optional tools extend the validation matrix:
 
 - SWIG 4 and Python interpreter/development-module headers build Python bindings.
-- A Lua interpreter enables VMWeave's generation and generated-C test.
+- Lua 5.4 or 5.3 development packages build VMWeave's C++/Kaguya frontend. A Lua
+  interpreter additionally enables the standalone builder compatibility test.
 - `dub` and a D compiler build/test the MachineIR package.
 - `dmd` or `ldc2` enables the C++/D/C++ exchange integration test.
 

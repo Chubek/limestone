@@ -79,6 +79,10 @@ add_library(limestone_object STATIC limestone/object.cpp)
 target_link_libraries(limestone_object PUBLIC limestone_foundation PRIVATE bin2bin_object)
 add_library(machineir_bridge STATIC metacode/machine-ir/bridge.cpp)
 target_link_libraries(machineir_bridge PUBLIC metacode schedrow regtl)
+add_library(machineir_native STATIC metacode/machine-ir/native_c.cpp metacode/machine-ir/native_toolchain.cpp)
+target_link_libraries(machineir_native PUBLIC machineir_bridge PRIVATE ${CMAKE_DL_LIBS})
+target_compile_definitions(machineir_native PRIVATE LIMESTONE_NATIVE_CC="${CMAKE_C_COMPILER}")
+add_subdirectory(vmweave)
 
 add_library(tunah STATIC tunah/tunah.cpp tunah/specification.cpp)
 add_executable(limestone-tunah-benchmark EXCLUDE_FROM_ALL tunah/benchmark.cpp)
@@ -286,6 +290,7 @@ add_test(NAME tunah-cli COMMAND ${CMAKE_COMMAND}
 find_program(LUA_EXECUTABLE NAMES lua lua5.4 lua5.3)
 if(LUA_EXECUTABLE)
   add_test(NAME vmweave COMMAND ${CMAKE_COMMAND} -DLUA=${LUA_EXECUTABLE} -DCC=${CMAKE_C_COMPILER} -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR} -DBINARY=${CMAKE_CURRENT_BINARY_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/vmweave.cmake)
+  set_tests_properties(vmweave PROPERTIES ENVIRONMENT "VMWEAVE_EXECUTABLE=$<TARGET_FILE:vmweave-cli>")
 endif()
 endif()
 

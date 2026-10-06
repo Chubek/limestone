@@ -19,7 +19,9 @@ machine-independent graph -> Tunah -> Unisel / Limeburg
 ```
 
 TraceML supplies a metatracing frontend. Exolayer supplies the native C ABI/FFI
-boundary. VMWeave generates embeddable VM execution skeletons.
+boundary. VMWeave compiles Lua descriptions through STK-00 into embeddable C
+runtimes with optional subsystems, plus MachineIR-backed assembly, native shared
+images and baseline JIT execution through the host C toolchain.
 
 ## Manual
 
@@ -33,7 +35,7 @@ hands-on introduction.
 
 Requirements: CMake 3.20+, a C compiler, a C++20 compiler, and Perl. The parser,
 solver, e-graph, and language-tooling dependencies are supplied in `third_party/`.
-The default build also requires LMDB and libffi development packages.
+The default build also requires LMDB, libffi, and Lua 5.4 (or 5.3) development packages.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -71,7 +73,8 @@ Configuration options:
 With `LIMESTONE_ENABLE_NATIVE_FFI=OFF`, callbacks and extensions remain available;
 `exl_native_available()` reports zero. D MachineIR tests are registered when both
 `dub` and a D compiler are found. The C++/D exchange test additionally needs `dmd`
-or `ldc2`. Lua enables the generated-VM compilation/execution test.
+or `ldc2`. VMWeave's C++ and generated-runtime tests run in the normal build;
+a Lua interpreter additionally enables the legacy standalone-DSL test.
 
 The D package can also be tested directly:
 

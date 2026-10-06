@@ -34,6 +34,10 @@ printing preserves decoded strings, including embedded control characters.
 * `source/machineir/serialize.d` — deterministic textual serialization
 * `source/machineir/exchange.d` — owning, validated C++/D region exchange
 * `bridge.hpp` / `bridge.cpp` — C++ exchange adapter (`Limestone::machineir_bridge`)
+* `native_c.hpp` / `native_c.cpp` — foreign-runtime binding envelope and C backend
+  (`Limestone::machineir_native`)
+* `native_toolchain.cpp` — POSIX C-toolchain assembly/native compilation and owning
+  shared-library loader
 * `tests/` — loader and IR tests
 
 ## Example
@@ -111,3 +115,48 @@ including dependencies that issue in different cycles. Reversing dependent
 co-issued instructions or interleaving/reversing block issue vectors is rejected.
 The actual C++ -> D -> C++ CTest re-encodes and independently executes edited CFG
 and spill programs; `dub test` runs the package's unit and Infobank-loader suites.
+
+## Native C backend
+
+The C++ `machineir_native::Unit` combines a normal `RegionExchange` entry with
+explicit parameter IDs, C support source, foreign-function definitions, and
+instruction-ID-to-callee bindings. It is an extensible backend contract, not a
+second MachineIR core model. The entry is unallocated/unscheduled SSA with a CFG;
+the C toolchain owns physical allocation, ABI lowering, optimization and encoding.
+
+`verify` validates the existing exchange (including dominance, dependencies and
+emission order), parameter/value types, conservative foreign-call effects,
+callee signatures, supported opcodes, and explicit block terminators. Supported
+ABI types are `ptr`, `i32`, and `u64`; entry returns `i32`. Operations are
+`foreign.call`, `const.i32`, `eq.i32`, `lt_zero.i32`, `br.nonzero`, `br`, and
+`ret.i32`. Foreign C bodies bind `a0`, `a1`, etc. to their declared parameters.
+Calls are nonspeculative barriers with read/write memory and possible traps.
+Arbitrary foreign C is checked and compiled by the configured C99 toolchain.
+
+`serialize` / `deserialize` use the strict, versioned
+`limestone.machineir.native-c` v1 JSON envelope, limited to 4 MiB:
+
+| Field | Contract |
+| --- | --- |
+| `schema`, `version` | Fixed schema name and integer 1 |
+| `region` | Canonical existing region-exchange JSON stored as a string |
+| `parameters` | Ordered array of entry input value IDs |
+| `support` | Authoritative translation-unit C source |
+| `functions` | Array of `{name,result,arguments,body,file,line}` foreign bindings |
+| `callees` | Array of `{instruction,function}` call bindings |
+
+Function names, argument/result ABI types, source provenance and complete body
+bytes survive round trips. Duplicate/unknown fields and bindings are errors. Map
+output is deterministically ordered. The `region` alone can be read and returned
+through the existing D exchange; preserve the foreign envelope alongside it when
+editing the MachineIR. The D core needs no VM-specific fields.
+
+`emit_c` emits the validated entry CFG and bindings. `emit_assembly` invokes the
+selected GCC/Clang-compatible C compiler with `-S`; `compile` builds and loads a
+shared library. `Library` owns image bytes and a reference-counted loader handle;
+`symbol` returns addresses valid while a library copy is alive. POSIX loader
+ownership keeps the mapped code alive after temporary build files are removed.
+Compiler execution uses argument vectors, a configurable timeout and bounded
+artifacts; errors retain C diagnostics and foreign source locations. Non-POSIX
+executable loading returns `Unsupported`. This adapter obtains target information
+from its toolchain; it does not add target ISA data to MachineIR or Infobank.

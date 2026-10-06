@@ -21,7 +21,7 @@ implemented.
 | MachineIR | Architecture-neutral D instructions/operands/effects/CFGs; dominance, liveness, use/def and serialization; validated versioned C++/D region/CFG/spill/group exchange |
 | TraceML | Source-located S-expression frontend, lexical call-by-name MetaKrivine execution, checked integer primitives, observers/events, budgets/cancellation, guard-preserving trace-to-graph lowering, explicit-target C/C++/Python/CLI compilation and a callable native constant/return integration |
 | Exolayer | Opaque C contexts, typed callbacks, scalar layouts, extension loading/lifetimes, fixed/variadic scalar native signatures, owning exact-width scalar/struct/embedded-array descriptors and fixed/variadic transactional by-value data calls, explicit calling conventions, owning native-library bindings through an isolated libffi adapter |
-| VMWeave | Validated deterministic Lua VM DSL, self-contained C state/handlers, optional switch dispatch and before/after hooks |
+| VMWeave | Kaguya-backed Lua compiler; validated owning model, lossless versioned STK-00, deterministic optional C components, four execution models, checked stack/tapes/labels, allocator adapters, objects/lifetimes, frames, module exports, atomic values, IPC, explicit rewrites and inline caches; built-in MachineIR foreign-call lowering, assembly/AOT native output and owning executable handles, generated C baseline-JIT binding |
 | Orchestration | C/C++ target/program/configuration APIs, optimizer/allocation/backend adapters, selected fixed-operand/ABI requirements merged into allocation and independently checked in encoding, inspectable stages, final spill/register/frame inspection, MachineIR handoff, byte/relocation/ELF output and CLI |
 
 Textual Unisel, Limeburg, Schedrow, and RegTL loaders have independent targets and canonical
@@ -83,6 +83,12 @@ and the per-architecture counts are in `limeburg/specs/README.md`.
 
 These are concrete implementation boundaries, rather than silently approximated
 behavior:
+
+- VMWeave's built-in MachineIR C backend uses a GCC/Clang-compatible compiler and
+  POSIX process/shared-library loading. Host-compatible ABI/layout is checked;
+  other executable platforms require a backend adapter. Moving/tracing GC,
+  dynamic module formats, and richer object layouts use subsystem extensions;
+  built-in objects use explicit reclamation.
 
 - Production Infobank entries need complete legal selection patterns, timing,
   operand/ABI lowering, and encoder contracts before they can generate executable

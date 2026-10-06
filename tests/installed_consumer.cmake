@@ -54,6 +54,25 @@ execute_process(COMMAND "${BINARY}/installed-consumer/limestone-traceml-consumer
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "Standalone TraceML runtime consumer failed: ${output}${error}")
 endif()
+execute_process(COMMAND "${BINARY}/installed-consumer/limestone-vmweave-consumer"
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Standalone VMWeave consumer failed: ${output}${error}")
+endif()
+execute_process(COMMAND "${prefix}/${BIN_DIR}/vmweave-cli" --check
+  "${prefix}/${DATA_DIR}/limestone/vmweave/examples/calculator.lua"
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Relocated VMWeave generator failed: ${output}${error}")
+endif()
+execute_process(COMMAND "${prefix}/${BIN_DIR}/vmweave-cli" --native
+  --program "${prefix}/${DATA_DIR}/limestone/vmweave/examples/calculator.tape"
+  -o "${BINARY}/installed-consumer/native"
+  "${prefix}/${DATA_DIR}/limestone/vmweave/examples/calculator.lua"
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Relocated VMWeave native compiler failed: ${output}${error}")
+endif()
 execute_process(COMMAND "${prefix}/${BIN_DIR}/limeburg-generate-specs" --check
   "${prefix}/${DATA_DIR}/limestone/infobank" "${prefix}/${DATA_DIR}/limestone/limeburg/specs"
   RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)

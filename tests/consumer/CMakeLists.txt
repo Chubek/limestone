@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(LimestoneConsumer LANGUAGES C CXX)
-find_package(Limestone 0.1 CONFIG REQUIRED COMPONENTS core il object bin2bin_object optimization traceml_api exolayer parsers tunah_unisel tunah_bin2bin limeburg_text limeburg_infobank schedrow_text regtl_text)
+find_package(Limestone 0.1 CONFIG REQUIRED COMPONENTS core il object bin2bin_object optimization traceml_api exolayer parsers tunah_unisel tunah_bin2bin limeburg_text limeburg_infobank schedrow_text regtl_text vmweave)
 add_executable(limestone-consumer main.cpp other.cpp api.c)
 target_link_libraries(limestone-consumer PRIVATE Limestone::core Limestone::il Limestone::exolayer Limestone::parsers
   Limestone::tunah_unisel Limestone::tunah_bin2bin Limestone::limeburg_text Limestone::schedrow_text Limestone::regtl_text)
@@ -25,3 +25,5 @@ add_executable(limestone-traceml-consumer ../traceml_c_api.c traceml.cpp)
 target_link_libraries(limestone-traceml-consumer PRIVATE Limestone::traceml_api)
 target_compile_options(limestone-traceml-consumer PRIVATE $<$<COMPILE_LANG_AND_ID:C,GNU,Clang>:-UNDEBUG>)
 set_target_properties(limestone-traceml-consumer PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
+add_executable(limestone-vmweave-consumer vmweave.cpp)
+target_link_libraries(limestone-vmweave-consumer PRIVATE Limestone::vmweave)
